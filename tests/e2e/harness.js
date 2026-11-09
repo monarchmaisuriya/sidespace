@@ -88,6 +88,15 @@ const ROUTES = {
       <button id="open-noopener" onclick="window.open('/second?via=noopener', '_blank', 'noopener')">noopener</button>
       <button id="open-plain" onclick="window.open('/second?via=plain')">plain</button>`),
   }),
+  '/with-icon': () => ({ body: '<!doctype html><title>With icon</title><link rel="icon" href="/icon.png"><h1>with icon</h1>' }),
+  '/icon.png': () => ({ headers: { 'Content-Type': 'image/png' }, body: readFileSync(join(EXTENSION_ROOT, 'icons/icon-32.png')) }),
+  // Like Gemini's and Claude's icons: loads fine for the site itself, but is
+  // refused to other origins (the extension page included).
+  '/corp-icon-page': () => ({ body: '<!doctype html><title>CORP icon</title><link rel="icon" href="/corp-icon.png"><h1>corp icon</h1>' }),
+  '/corp-icon.png': () => ({
+    headers: { 'Content-Type': 'image/png', 'Cross-Origin-Resource-Policy': 'same-origin' },
+    body: readFileSync(join(EXTENSION_ROOT, 'icons/icon-48.png')),
+  }),
   '/ua': (req) => ({ body: `<!doctype html><title>UA</title><h1>ua</h1><pre id="ua">${req.headers['user-agent']}</pre>` }),
   '/search': (req) => ({ body: page('Search', `search ${new URL(req.url, 'http://x').searchParams.get('q')}`) }),
 };
@@ -202,6 +211,13 @@ export async function launch({ grantBookmarks = false } = {}) {
   };
 }
 
+// Links and buttons inside panel pages are activated with the keyboard
+// (locator.press('Enter')), not the mouse. A mouse event is routed into the
+// page's cross-process frame by screen position, and Chromium occasionally
+// drops one sent right after the page renders (seen as 3 of 20 clicks never
+// reaching the page, 2026-11-09). Keyboard input goes to the focused frame,
+// and Enter still produces the real, trusted click the extension checks for.
+
 // Helpers that read the panel UI.
 export const activeTitle = (panel) => panel.locator('.tab[aria-selected="true"] .title').textContent();
 export const activeFrame = (panel) => panel.frameLocator('iframe.frame:not([hidden])');
@@ -216,4 +232,10 @@ export async function setSettings(panel, patch) {
     const result = await chrome.runtime.sendMessage({ type: 'sidespace:sync-rules' });
     if (!result.ok) throw new Error(result.error);
   }, patch);
+}
+
+// Switches tab through the tab list (the toolbar's tab count button).
+export async function pickTab(panel, tab) {
+  await panel.click('#tabs-button');
+  await tab.click();
 }

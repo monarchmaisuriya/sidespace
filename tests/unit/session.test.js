@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   activateTab, addTab, canGo, closeTab, createSession, cycleTab, findAppTab, goHistory, MAX_HISTORY, MAX_TABS,
-  moveTab, nextZoom, pushUrl, replaceUrl, restoreSession, updateTab,
+  moveTab, nextZoom, pushUrl, replaceUrl, restoreSession, tieTab, untieApp, updateTab,
 } from '../../src/panel/session.js';
 
 function withTabs(n) {
@@ -89,10 +89,15 @@ test('a speed dial tab starts with empty history', () => {
   assert.deepEqual(tab(s, 't1').history, ['https://x.example/']);
 });
 
-test('rail apps find their own tab', () => {
-  const s = addTab(withTabs(1), { url: 'https://chatgpt.com/c/1', app: 'https://chatgpt.com/' }).session;
-  assert.equal(findAppTab(s, 'https://chatgpt.com/').id, 't2');
-  assert.equal(findAppTab(s, 'https://claude.ai/'), null);
+test('rail apps find their own tab by app id; untying makes it an ordinary tab', () => {
+  let s = addTab(withTabs(1), { url: 'https://chatgpt.com/c/1', app: 'app-abc' }).session;
+  assert.equal(findAppTab(s, 'app-abc').id, 't2');
+  assert.equal(findAppTab(s, 'app-zzz'), null);
+  s = tieTab(s, 't1', 'app-def');
+  assert.equal(findAppTab(s, 'app-def').id, 't1');
+  s = untieApp(s, 'app-abc');
+  assert.equal(findAppTab(s, 'app-abc'), null);
+  assert.equal(tieTab(s, 't1', 'javascript:x').tabs[0].app, '');
 });
 
 test('cycle wraps both ways and move clamps the index', () => {

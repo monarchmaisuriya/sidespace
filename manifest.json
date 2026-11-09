@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sidespace",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Open any website as tabs in Chrome's side panel.",
   "minimum_chrome_version": "128",
   "icons": {
@@ -29,7 +29,8 @@
     "sidePanel",
     "storage",
     "contextMenus",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequestWithHostAccess",
+    "favicon"
   ],
   "optional_permissions": ["bookmarks"],
   "host_permissions": ["<all_urls>"],

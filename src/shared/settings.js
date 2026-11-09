@@ -4,6 +4,10 @@
 // shortcut list would exceed.
 
 export const SETTINGS_KEY = 'settings';
+// Stored with the settings; bumped when stored values need a one-time
+// migration. 2: the old fixed accent default (#6d5dfc) became "theme accent".
+export const SETTINGS_VERSION = 2;
+export const MAX_LINK_LENGTH = 2048;
 export const MAX_SHORTCUTS = 24;
 export const MAX_APPS = 12;
 export const MAX_MOBILE_SITES = 200;
@@ -17,12 +21,12 @@ export const SEARCH_ENGINES = {
 
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
-  accent: '#6d5dfc',
+  accent: '',
   density: 'comfortable',
   searchEngine: 'google',
   customSearchUrl: '',
   homePage: '',
-  tabStrip: 'auto',
+  tabLayout: 'rail',
   restoreSession: true,
   unlockFraming: true,
   mobileMode: 'off',
@@ -43,7 +47,7 @@ const CHOICES = {
   theme: ['system', 'light', 'dark'],
   density: ['comfortable', 'compact'],
   searchEngine: [...Object.keys(SEARCH_ENGINES), 'custom'],
-  tabStrip: ['always', 'auto'],
+  tabLayout: ['rail', 'drawer'],
   mobileMode: ['off', 'sites', 'all'],
   newWindowLinks: ['panel', 'browser'],
   railPosition: ['left', 'right', 'hidden'],
@@ -78,6 +82,35 @@ export function normalizeHostname(value) {
   return valid ? host : '';
 }
 
+// Before settings version 2 the accent had a fixed default, stored for
+// everyone who never changed it; in older settings it means "theme accent".
+const FORMER_DEFAULT_ACCENT = '#6d5dfc';
+
+// '' = the theme's accent; otherwise a #rrggbb colour.
+function normalizeAccent(value, version) {
+  if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) return '';
+  const accent = value.toLowerCase();
+  return accent === FORMER_DEFAULT_ACCENT && version < 2 ? '' : accent;
+}
+
+// The one rule for addresses in rail apps and speed dial shortcuts.
+export function isLinkUrl(value) {
+  return isHttpUrl(value) && value.length <= MAX_LINK_LENGTH;
+}
+
+const APP_ID = /^app-[a-z0-9]+$/;
+
+// A stable id for a rail app, so its open tab stays tied to it when the
+// app's address is edited. Derived from the address (the same on every read
+// of settings that have none yet) and kept from then on.
+export function newAppId(url, taken) {
+  let hash = 0x811c9dc5;
+  for (const char of url) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0;
+  let id = `app-${hash.toString(36)}`;
+  for (let n = 2; taken.has(id); n += 1) id = `app-${hash.toString(36)}${n.toString(36)}`;
+  return id;
+}
+
 function pickChoice(key, value) {
   return CHOICES[key].includes(value) ? value : DEFAULT_SETTINGS[key];
 }
@@ -92,7 +125,7 @@ function normalizeLinks(list, max) {
   const result = [];
   const seen = new Set();
   for (const item of list) {
-    if (!item || !isHttpUrl(item.url) || item.url.length > 2048 || seen.has(item.url)) continue;
+    if (!item || !isLinkUrl(item.url) || seen.has(item.url)) continue;
     seen.add(item.url);
     const title = typeof item.title === 'string' && item.title.trim()
       ? item.title.trim().slice(0, 80)
@@ -101,6 +134,17 @@ function normalizeLinks(list, max) {
     if (result.length === max) break;
   }
   return result;
+}
+
+// Rail apps are links with a unique, stable id.
+function normalizeApps(list) {
+  const taken = new Set();
+  return normalizeLinks(list, MAX_APPS).map((link) => {
+    const given = list.find((item) => item?.url === link.url)?.id;
+    const id = typeof given === 'string' && APP_ID.test(given) && !taken.has(given) ? given : newAppId(link.url, taken);
+    taken.add(id);
+    return { id, ...link };
+  });
 }
 
 function normalizeMobileSites(list) {
@@ -121,16 +165,16 @@ export function normalizeSettings(raw) {
     : '';
   let searchEngine = pickChoice('searchEngine', input.searchEngine);
   if (searchEngine === 'custom' && !customSearchUrl) searchEngine = DEFAULT_SETTINGS.searchEngine;
+  const version = Number.isInteger(input.settingsVersion) ? input.settingsVersion : 1;
   return {
+    settingsVersion: SETTINGS_VERSION,
     theme: pickChoice('theme', input.theme),
-    accent: typeof input.accent === 'string' && /^#[0-9a-f]{6}$/i.test(input.accent)
-      ? input.accent.toLowerCase()
-      : DEFAULT_SETTINGS.accent,
+    accent: normalizeAccent(input.accent, version),
     density: pickChoice('density', input.density),
     searchEngine,
     customSearchUrl,
     homePage: isHttpUrl(input.homePage) ? input.homePage : '',
-    tabStrip: pickChoice('tabStrip', input.tabStrip),
+    tabLayout: pickChoice('tabLayout', input.tabLayout),
     restoreSession: pickBoolean('restoreSession', input.restoreSession),
     unlockFraming: pickBoolean('unlockFraming', input.unlockFraming),
     mobileMode: pickChoice('mobileMode', input.mobileMode),
@@ -140,9 +184,17 @@ export function normalizeSettings(raw) {
     railPosition: pickChoice('railPosition', input.railPosition),
     // A missing list means "never set", so the presets apply; an empty list
     // means the user removed every app.
-    apps: Array.isArray(input.apps) ? normalizeLinks(input.apps, MAX_APPS) : DEFAULT_SETTINGS.apps.map((app) => ({ ...app })),
+    apps: normalizeApps(Array.isArray(input.apps) ? input.apps : DEFAULT_SETTINGS.apps),
     showClock: pickBoolean('showClock', input.showClock),
   };
+}
+
+// True for a plain object carrying at least one Sidespace setting. Used to
+// refuse importing an unrelated JSON file, which normalizeSettings would
+// otherwise turn into "all defaults" and wipe the user's settings.
+export function looksLikeSettings(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  return Object.keys(raw).some((key) => Object.hasOwn(DEFAULT_SETTINGS, key));
 }
 
 export function searchTemplate(settings) {
@@ -163,9 +215,14 @@ export async function saveSettings(raw) {
   return next;
 }
 
-// Applies a partial change on top of the current stored settings.
-export async function updateSettings(patch) {
-  return saveSettings({ ...(await loadSettings()), ...patch });
+// Applies a change on top of the settings as stored right now. `change` is a
+// partial settings object, or a function from the current settings to one;
+// a function sees edits made elsewhere (another panel, the settings page) and
+// may throw to refuse the change.
+export async function updateSettings(change) {
+  const current = await loadSettings();
+  const patch = typeof change === 'function' ? change(current) : change;
+  return saveSettings({ ...current, ...patch });
 }
 
 export function onSettingsChanged(callback) {

@@ -19,6 +19,13 @@ function cleanUrl(url) {
   return isHttpUrl(url) ? url : '';
 }
 
+// A tab's tie to a rail app: the app's id. Sessions saved before app ids
+// stored the app's URL; those are kept for the panel to map on load.
+const APP_ID = /^app-[a-z0-9]+$/;
+function cleanAppRef(value) {
+  return typeof value === 'string' && (APP_ID.test(value) || isHttpUrl(value)) ? value : '';
+}
+
 function cleanZoom(zoom) {
   return ZOOM_LEVELS.includes(zoom) ? zoom : 1;
 }
@@ -27,13 +34,23 @@ export function activeTab(session) {
   return session.tabs.find((tab) => tab.id === session.activeId) ?? null;
 }
 
-export function findAppTab(session, appUrl) {
-  return session.tabs.find((tab) => tab.app === appUrl) ?? null;
+export function findAppTab(session, appId) {
+  return session.tabs.find((tab) => tab.app === appId) ?? null;
+}
+
+// Sets which app a tab belongs to ('' for none).
+export function tieTab(session, id, appId) {
+  return { ...session, tabs: session.tabs.map((tab) => (tab.id === id ? { ...tab, app: cleanAppRef(appId) } : tab)) };
+}
+
+// Turns every tab of the app back into an ordinary tab (the app was removed).
+export function untieApp(session, appId) {
+  return { ...session, tabs: session.tabs.map((tab) => (tab.app === appId ? { ...tab, app: '' } : tab)) };
 }
 
 // Inserts after the active tab. Throws when the tab limit is reached so the
 // caller can tell the user instead of silently dropping the tab.
-// `app` ties the tab to a rail app (its URL) so the rail can find it again.
+// `app` ties the tab to a rail app (its id) so the rail can find it again.
 export function addTab(session, { url = '', activate = true, app = '' } = {}) {
   if (session.tabs.length >= MAX_TABS) {
     throw new Error(`Sidespace keeps at most ${MAX_TABS} panel tabs; close one first.`);
@@ -45,7 +62,7 @@ export function addTab(session, { url = '', activate = true, app = '' } = {}) {
     title: '',
     icon: '',
     zoom: 1,
-    app: cleanUrl(app),
+    app: cleanAppRef(app),
     history: clean ? [clean] : [],
     historyIndex: clean ? 0 : -1,
   };
@@ -175,7 +192,7 @@ export function restoreSession(raw) {
       title: typeof item.title === 'string' ? item.title.slice(0, 300) : '',
       icon: isHttpUrl(item.icon) ? item.icon : '',
       zoom: cleanZoom(item.zoom),
-      app: cleanUrl(item.app),
+      app: cleanAppRef(item.app),
       history,
       historyIndex,
     });

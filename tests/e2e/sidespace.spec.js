@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { activeFrame, activeTitle, go, launch, requestLog, setSettings } from './harness.js';
+import { activeFrame, activeTitle, go, launch, pickTab, requestLog, setSettings } from './harness.js';
 
 let env;
 let panel;
@@ -63,14 +63,14 @@ test.describe('loading pages', () => {
 
   test('a cross-site link to a DENY page, clicked inside the panel, renders', async () => {
     await go(panel, `${env.base}/cross`);
-    await activeFrame(panel).locator('#cross').click();
+    await activeFrame(panel).locator('#cross').press('Enter');
     await expect(activeFrame(panel).locator('h1')).toHaveText('xfo page');
     await expect(address()).toHaveValue(`${env.altBase}/xfo`);
   });
 
   test('a same-site form POST to a DENY page renders', async () => {
     await go(panel, `${env.base}/form`);
-    await activeFrame(panel).locator('#submit').click();
+    await activeFrame(panel).locator('#submit').press('Enter');
     await expect(activeFrame(panel).locator('h1')).toHaveText('xfo page');
     await expect(address()).toHaveValue(`${env.base}/xfo`);
   });
@@ -141,10 +141,10 @@ test.describe('security', () => {
 test.describe('navigation', () => {
   test('the address bar follows link clicks and pushState', async () => {
     await go(panel, `${env.base}/plain`);
-    await activeFrame(panel).locator('#next').click();
+    await activeFrame(panel).locator('#next').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/second`);
     await go(panel, `${env.base}/spa`);
-    await activeFrame(panel).locator('#push').click();
+    await activeFrame(panel).locator('#push').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/spa/next`);
     await expect.poll(() => activeTitle(panel)).toBe('SPA next');
   });
@@ -162,9 +162,9 @@ test.describe('navigation', () => {
 
   test('going back to a cross-site DENY page renders it', async () => {
     await go(panel, `${env.base}/cross`);
-    await activeFrame(panel).locator('#cross').click();
+    await activeFrame(panel).locator('#cross').press('Enter');
     await expect(address()).toHaveValue(`${env.altBase}/xfo`);
-    await activeFrame(panel).locator('#next').click();
+    await activeFrame(panel).locator('#next').press('Enter');
     await expect(address()).toHaveValue(`${env.altBase}/second`);
     await panel.click('#back');
     await expect(activeFrame(panel).locator('h1')).toHaveText('xfo page');
@@ -172,24 +172,24 @@ test.describe('navigation', () => {
 
   test('back in one tab does not move another tab', async () => {
     await go(panel, `${env.base}/plain`);
-    await activeFrame(panel).locator('#next').click();
+    await activeFrame(panel).locator('#next').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/second`);
     const firstTab = await panel.locator('.tab[aria-selected="true"]').getAttribute('data-id');
     await panel.click('#new-tab');
     await go(panel, `${env.base}/csp`);
-    await activeFrame(panel).locator('#next').click();
+    await activeFrame(panel).locator('#next').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/second`);
-    await panel.click(`.tab[data-id="${firstTab}"]`);
+    await pickTab(panel, panel.locator(`.tab[data-id="${firstTab}"]`));
     await panel.click('#back');
     await expect(address()).toHaveValue(`${env.base}/plain`);
-    await panel.locator('.tab').last().click();
+    await pickTab(panel, panel.locator('.tab').last());
     await expect(address()).toHaveValue(`${env.base}/second`);
   });
 
   test('a target=_blank link opens a new panel tab', async () => {
     await go(panel, `${env.base}/plain`);
     const before = await panel.locator('.tab').count();
-    await activeFrame(panel).locator('#blank').click();
+    await activeFrame(panel).locator('#blank').press('Enter');
     await expect(panel.locator('.tab')).toHaveCount(before + 1);
     await expect(address()).toHaveValue(`${env.base}/second`);
   });
@@ -199,7 +199,7 @@ test.describe('navigation', () => {
     await expect.poll(() => activeTitle(panel)).toBe('Opener');
     const before = await panel.locator('.tab').count();
     const pagesBefore = env.context.pages().length;
-    await activeFrame(panel).locator('#open-noopener').click();
+    await activeFrame(panel).locator('#open-noopener').press('Enter');
     await expect(panel.locator('.tab')).toHaveCount(before + 1);
     await expect(address()).toHaveValue(`${env.base}/second?via=noopener`);
     expect(env.context.pages().length).toBe(pagesBefore);
@@ -208,7 +208,7 @@ test.describe('navigation', () => {
   test("window.open resolves a relative URL against the page's base URL", async () => {
     await go(panel, `${env.base}/opener-base`);
     await expect.poll(() => activeTitle(panel)).toBe('Opener base');
-    await activeFrame(panel).locator('#open-relative').click();
+    await activeFrame(panel).locator('#open-relative').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/base/second?via=base`);
   });
 
@@ -230,7 +230,7 @@ test.describe('navigation', () => {
     await expect.poll(() => activeTitle(panel)).toBe('Opener');
     const before = await panel.locator('.tab').count();
     const popup = env.context.waitForEvent('page');
-    await activeFrame(panel).locator('#open-plain').click();
+    await activeFrame(panel).locator('#open-plain').press('Enter');
     const opened = await popup;
     expect(opened.url()).toBe(`${env.base}/second?via=plain`);
     await opened.close();
@@ -267,9 +267,9 @@ test.describe('rail, views and dashboard', () => {
     await app.click();
     await expect(panel.locator('.tab')).toHaveCount(before + 1);
     await expect(app).toHaveAttribute('aria-pressed', 'true');
-    await activeFrame(panel).locator('#next').click();
+    await activeFrame(panel).locator('#next').press('Enter');
     await expect(address()).toHaveValue(`${env.base}/second`);
-    await panel.locator('.tab').first().click();
+    await pickTab(panel, panel.locator('.tab').first());
     await expect(app).toHaveAttribute('aria-pressed', 'false');
     await app.click();
     await expect(panel.locator('.tab')).toHaveCount(before + 1);

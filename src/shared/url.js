@@ -55,6 +55,17 @@ export function originFaviconUrl(pageUrl) {
   return isHttpUrl(pageUrl) ? `${new URL(pageUrl).origin}/favicon.ico` : '';
 }
 
+// The address bar's resting text: no "https://", no "www.", no lone "/".
+// "https://www.example.com/" -> "example.com". "http://" stays, so an
+// insecure page never looks like a secure one.
+export function shortUrl(value) {
+  if (!isHttpUrl(value)) return value ?? '';
+  const url = new URL(value);
+  const path = url.pathname === '/' ? '' : url.pathname;
+  const scheme = url.protocol === 'http:' ? 'http://' : '';
+  return `${scheme}${url.host.replace(/^www\./, '')}${path}${url.search}${url.hash}`;
+}
+
 export function displayHost(value) {
   try {
     return new URL(value).hostname.replace(/^www\./, '');

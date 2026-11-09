@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  displayHost, isBrowserOnlyUrl, originFaviconUrl, resolveInput, sameOriginUrl, trustedFrameUrl,
+  displayHost, isBrowserOnlyUrl, originFaviconUrl, resolveInput, sameOriginUrl, shortUrl, trustedFrameUrl,
 } from '../../src/shared/url.js';
 
 const T = 'https://search.example/?q=%s';
@@ -58,4 +58,12 @@ test('page-supplied URLs are kept only on the page origin', () => {
   assert.equal(sameOriginUrl('', 'https://a.example/'), '');
   assert.equal(originFaviconUrl('https://a.example/x/y'), 'https://a.example/favicon.ico');
   assert.equal(originFaviconUrl('chrome://settings'), '');
+});
+
+test('shortUrl drops https, www and a lone slash, but keeps http:// so insecure pages show it', () => {
+  assert.equal(shortUrl('https://www.example.com/'), 'example.com');
+  assert.equal(shortUrl('https://claude.ai/new?x=1#y'), 'claude.ai/new?x=1#y');
+  assert.equal(shortUrl('http://localhost:3000/a'), 'http://localhost:3000/a');
+  assert.equal(shortUrl('http://plain.example/'), 'http://plain.example');
+  assert.equal(shortUrl(''), '');
 });

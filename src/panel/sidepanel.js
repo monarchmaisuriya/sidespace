@@ -1,13 +1,18 @@
 import {
-  isHttpUrl, loadSettings, MAX_APPS, MAX_SHORTCUTS, normalizeHostname, onSettingsChanged, searchTemplate, updateSettings,
+  isHttpUrl, loadSettings, normalizeHostname, onSettingsChanged, searchTemplate, updateSettings,
 } from '../shared/settings.js';
 import {
-  displayHost, isBrowserOnlyUrl, resolveInput, sameOriginUrl, trustedFrameUrl,
+  displayHost, isBrowserOnlyUrl, resolveInput, sameOriginUrl, shortUrl, trustedFrameUrl,
 } from '../shared/url.js';
+import {
+  addLink, moveLink, RAIL, removeLink, SPEED_DIAL, updateLink,
+} from '../shared/links.js';
 import { onInboxChanged, takeForWindow } from '../shared/inbox.js';
 import { applyAppearance } from '../shared/theme.js';
 import * as model from './session.js';
-import { faviconFor } from './favicon.js';
+import { faviconFor } from '../shared/favicon.js';
+import { reconcile, setIcon } from '../shared/reconcile.js';
+import { initAppDialog } from './app-dialog.js';
 import { initBookmarks } from './bookmarks-view.js';
 import { initNotes } from './notes-view.js';
 
@@ -21,21 +26,23 @@ const HINT_DELAY_MS = 1000;
 const SAVE_DELAY_MS = 300;
 const MAX_EARLY_STATES = 100;
 const VIEWS = ['web', 'bookmarks', 'notes'];
-const CLOSE_ICON = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const CLOSE_ICON = '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
   shell: $('shell'),
-  railApps: $('rail-apps'),
   rail: $('rail'),
+  railApps: $('rail-apps'),
+  railTabs: $('rail-tabs'),
+  railMenu: $('rail-menu'),
   address: $('address'),
   addressForm: $('address-form'),
   back: $('back'),
   forward: $('forward'),
   reload: $('reload'),
-  tabstrip: $('tabstrip'),
+  tabCount: $('tab-count'),
+  drawer: $('tab-drawer'),
   tabs: $('tabs'),
-  newTab: $('new-tab'),
   viewport: $('viewport'),
   speedDial: $('speed-dial'),
   clock: $('dashboard-clock'),
@@ -63,6 +70,7 @@ let view = 'web';
 let windowId;
 let bookmarks;
 let notes;
+let appDialog;
 
 const frames = new Map(); // panel tab id -> <iframe>
 // A page inside a frame proves which frame it lives in with a random token
@@ -133,6 +141,11 @@ function closeTab(id) {
   setSession(next);
 }
 
+function activate(tabId) {
+  setSession(model.activateTab(session, tabId));
+  setView('web');
+}
+
 // Loads the tab's current URL into its frame (if it has one yet).
 function loadFrame(tabId) {
   const frame = frames.get(tabId);
@@ -164,10 +177,9 @@ function openUrlFromOutside(url) {
 }
 
 function openApp(app) {
-  const existing = model.findAppTab(session, app.url);
-  if (existing) setSession(model.activateTab(session, existing.id));
-  else openTab(app.url, { app: app.url });
-  setView('web');
+  const existing = model.findAppTab(session, app.id);
+  if (existing) activate(existing.id);
+  else openTab(app.url, { app: app.id });
 }
 
 // ---------- frames ----------
@@ -309,52 +321,99 @@ function tabLabel(tab) {
   return tab.title || displayHost(tab.url) || 'New tab';
 }
 
+function appForTab(tab) {
+  return tab.app ? settings.apps.find((app) => app.id === tab.app) ?? null : null;
+}
+
+function appById(id) {
+  return settings.apps.find((app) => app.id === id) ?? null;
+}
+
+function closeButton(className, tab) {
+  const close = document.createElement('button');
+  close.className = className;
+  close.dataset.closeId = tab.id;
+  close.innerHTML = CLOSE_ICON;
+  return close;
+}
+
 function renderRail() {
   ui.shell.classList.remove('rail-left', 'rail-right', 'rail-hidden');
   ui.shell.classList.add(`rail-${settings.railPosition}`);
+  ui.shell.classList.toggle('tabs-in-rail', settings.tabLayout === 'rail');
   const active = model.activeTab(session);
-  const buttons = settings.apps.map((app) => {
+
+  reconcile(ui.railApps, settings.apps, (app) => app.id, () => {
+    const item = document.createElement('div');
+    item.className = 'rail-item';
+    item.role = 'listitem';
     const button = document.createElement('button');
-    button.className = 'rail-button';
+    button.className = 'rail-button rail-app';
+    button.draggable = true;
+    item.append(button);
+    return item;
+  }, (item, app) => {
+    const button = item.firstElementChild;
+    const appTab = model.findAppTab(session, app.id);
     button.dataset.app = app.url;
+    button.dataset.appId = app.id;
     button.title = app.title;
     button.setAttribute('aria-label', app.title);
-    button.setAttribute('aria-pressed', String(view === 'web' && active?.app === app.url));
-    const appTab = model.findAppTab(session, app.url);
-    button.append(faviconFor(app.url, appTab ? sameOriginUrl(appTab.icon, app.url) : '', 32));
-    return button;
+    button.setAttribute('aria-pressed', String(view === 'web' && active?.app === app.id));
+    button.classList.toggle('is-open', Boolean(appTab));
+    setIcon(button, app.url, appTab ? sameOriginUrl(appTab.icon, app.url) : '', faviconFor);
   });
-  ui.railApps.replaceChildren(...buttons);
+
+  const railTabs = session.tabs.filter((tab) => !appForTab(tab));
+  reconcile(ui.railTabs, railTabs, (tab) => tab.id, (tab) => {
+    const item = document.createElement('div');
+    item.className = 'rail-item';
+    item.role = 'listitem';
+    const button = document.createElement('button');
+    button.className = 'rail-button rail-tab';
+    button.draggable = true;
+    button.dataset.id = tab.id;
+    const close = closeButton('rail-close', tab);
+    close.tabIndex = -1;
+    item.append(button, close);
+    return item;
+  }, (item, tab) => {
+    const [button, close] = item.children;
+    button.title = tab.url ? `${tabLabel(tab)}\n${shortUrl(tab.url)}` : 'New tab';
+    button.setAttribute('aria-label', tabLabel(tab));
+    button.setAttribute('aria-pressed', String(view === 'web' && tab.id === session.activeId));
+    close.setAttribute('aria-label', `Close ${tabLabel(tab)}`);
+    setIcon(button, tab.url, tab.icon, faviconFor);
+  });
   for (const button of ui.rail.querySelectorAll('[data-view]')) {
     button.setAttribute('aria-pressed', String(view === button.dataset.view));
   }
 }
 
-function renderTabs() {
-  const items = session.tabs.map((tab, index) => {
-    const el = document.createElement('div');
-    el.className = 'tab';
-    el.role = 'tab';
-    el.tabIndex = tab.id === session.activeId ? 0 : -1;
-    el.draggable = true;
-    el.dataset.id = tab.id;
-    el.title = tab.url ? `${tabLabel(tab)}\n${tab.url}` : 'New tab';
-    el.setAttribute('aria-selected', String(tab.id === session.activeId && view === 'web'));
-    el.setAttribute('aria-posinset', String(index + 1));
+function renderDrawer() {
+  reconcile(ui.tabs, session.tabs, (tab) => tab.id, (tab) => {
+    const li = document.createElement('li');
+    li.className = 'tab';
+    li.role = 'tab';
+    li.draggable = true;
+    li.tabIndex = 0;
+    li.dataset.id = tab.id;
     const title = document.createElement('span');
     title.className = 'title';
-    title.textContent = tabLabel(tab);
-    const close = document.createElement('button');
-    close.className = 'icon-button close';
-    close.setAttribute('aria-label', `Close ${tabLabel(tab)}`);
-    close.innerHTML = CLOSE_ICON;
-    close.tabIndex = -1;
-    el.append(faviconFor(tab.url, tab.icon, 16), title, close);
-    return el;
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'App';
+    li.append(title, tag, closeButton('icon-button small close', tab));
+    return li;
+  }, (li, tab) => {
+    li.title = tab.url || 'New tab';
+    li.setAttribute('aria-selected', String(tab.id === session.activeId && view === 'web'));
+    li.querySelector('.title').textContent = tabLabel(tab);
+    li.querySelector('.tag').hidden = !appForTab(tab);
+    li.querySelector('.close').setAttribute('aria-label', `Close ${tabLabel(tab)}`);
+    setIcon(li, tab.url, tab.icon, faviconFor);
   });
-  ui.tabs.replaceChildren(...items);
-  ui.tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  ui.tabstrip.classList.toggle('hidden-strip', settings.tabStrip === 'auto' && session.tabs.length < 2);
+  ui.tabCount.textContent = String(session.tabs.length);
 }
 
 function renderFrames(active) {
@@ -384,42 +443,49 @@ function renderSpeedDial(active) {
   if (ui.speedDial.hidden) return;
   ui.clock.hidden = !settings.showClock;
   if (settings.showClock) renderClock();
-  const tiles = settings.shortcuts.map((shortcut, index) => {
+  reconcile(ui.tiles, settings.shortcuts, (shortcut) => shortcut.url, () => {
     const li = document.createElement('li');
     li.className = 'tile';
     const link = document.createElement('a');
-    link.href = shortcut.url;
-    link.dataset.url = shortcut.url;
     const label = document.createElement('span');
     label.className = 'label';
-    label.textContent = shortcut.title;
-    link.append(faviconFor(shortcut.url, '', 32), label);
+    link.append(label);
     const remove = document.createElement('button');
     remove.className = 'icon-button small remove';
-    remove.dataset.removeIndex = String(index);
-    remove.setAttribute('aria-label', `Remove ${shortcut.title}`);
     remove.innerHTML = CLOSE_ICON;
     li.append(link, remove);
     return li;
+  }, (li, shortcut) => {
+    const [link, remove] = li.children;
+    link.href = shortcut.url;
+    link.dataset.url = shortcut.url;
+    link.querySelector('.label').textContent = shortcut.title;
+    setIcon(link, shortcut.url, '', faviconFor);
+    remove.dataset.removeUrl = shortcut.url;
+    remove.setAttribute('aria-label', `Remove ${shortcut.title}`);
   });
-  ui.tiles.replaceChildren(...tiles);
-  ui.tilesEmpty.hidden = tiles.length > 0;
+  ui.tilesEmpty.hidden = settings.shortcuts.length > 0;
 }
 
 function renderHint() {
   ui.hint.hidden = view !== 'web' || !hintTabs.has(session.activeId);
 }
 
+function renderAddress(active) {
+  if (document.activeElement === ui.address) return;
+  ui.address.value = view === 'web' ? shortUrl(active?.url ?? '') : '';
+}
+
 function render() {
   const active = model.activeTab(session);
   renderRail();
-  renderTabs();
+  renderDrawer();
   renderFrames(active);
   renderSpeedDial(active);
   ui.bookmarksView.hidden = view !== 'bookmarks';
   ui.notesView.hidden = view !== 'notes';
   renderHint();
-  if (document.activeElement !== ui.address) ui.address.value = view === 'web' ? (active?.url ?? '') : '';
+  renderAddress(active);
   ui.back.disabled = view !== 'web' || !model.canGo(active, -1);
   ui.forward.disabled = view !== 'web' || !model.canGo(active, 1);
   ui.reload.disabled = view !== 'web' || !active?.url;
@@ -437,8 +503,8 @@ function renderMenu() {
     const needsPage = ['open-in-browser', 'add-shortcut', 'toggle-pin', 'zoom-in', 'zoom-out'].includes(button.dataset.command);
     button.disabled = needsPage && !page;
   }
-  const pinnedUrl = active?.app || page;
-  ui.menuPin.textContent = pinnedUrl && isPinned(pinnedUrl) ? 'Unpin from rail' : 'Pin to rail';
+  const pinned = Boolean(active && appForTab(active)) || Boolean(page && isPinned(page));
+  ui.menuPin.textContent = pinned ? 'Unpin from rail' : 'Pin to rail';
   ui.zoomLevel.value = `${Math.round((active?.zoom ?? 1) * 100)}%`;
   ui.mobileToggle.disabled = !host || settings.mobileMode === 'all';
   ui.mobileToggle.checked = settings.mobileMode === 'all'
@@ -451,6 +517,127 @@ function showToast(text) {
   ui.toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { ui.toast.hidden = true; }, 2500);
+}
+
+// ---------- rail apps: add, edit, move, remove ----------
+
+// Applies `change` to the rail apps as stored right now (another panel or
+// the settings page may have changed them) and returns the new list.
+async function changeApps(change) {
+  settings = await updateSettings((current) => ({ apps: change(current.apps) }));
+  render();
+  return settings.apps;
+}
+
+// Runs a rail app action; a refused or failed one is shown, never dropped.
+async function appAction(action) {
+  try {
+    await action();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function openAddAppDialog() {
+  const active = model.activeTab(session);
+  const page = view === 'web' && active?.url && !appForTab(active) ? active : null;
+  appDialog.open({
+    title: 'Add an app',
+    values: page ? { title: tabLabel(page), url: page.url } : { title: '', url: '' },
+    save: async ({ title, url }) => {
+      const apps = await changeApps((current) => addLink(current, { title, url }, RAIL));
+      const added = apps.at(-1);
+      // The current page becomes the new app's tab when it is that page.
+      if (page && page.url === added.url) setSession(model.tieTab(session, page.id, added.id));
+      showToast(`Added ${added.title} to the rail.`);
+    },
+  });
+}
+
+function openEditAppDialog(app) {
+  appDialog.open({
+    title: 'Edit app',
+    values: app,
+    // The app keeps its id, so its open tab stays tied to it.
+    save: ({ title, url }) => changeApps((current) => updateLink(current, app.url, { title, url }, RAIL)),
+  });
+}
+
+function moveApp(app, step) {
+  return appAction(() => changeApps((current) => {
+    const index = current.findIndex((item) => item.id === app.id);
+    return moveLink(current, app.url, index + step, RAIL);
+  }));
+}
+
+function removeApp(app) {
+  return appAction(async () => {
+    await changeApps((current) => removeLink(current, app.url, RAIL));
+    // Its open tab stays open as an ordinary tab.
+    setSession(model.untieApp(session, app.id));
+    showToast(`Removed ${app.title} from the rail.`);
+  });
+}
+
+// Pins the active page to the rail, or unpins the app it belongs to.
+function togglePin() {
+  const active = activeWebTab();
+  if (!active?.url) return Promise.resolve();
+  const app = appForTab(active) ?? settings.apps.find((item) => item.url === active.url);
+  if (app) return removeApp(app);
+  return appAction(async () => {
+    const apps = await changeApps((current) => addLink(current, { title: tabLabel(active), url: active.url }, RAIL));
+    setSession(model.tieTab(session, active.id, apps.at(-1).id));
+    showToast('Pinned to the rail.');
+  });
+}
+
+// ---------- rail context menu ----------
+
+function menuButton(label, action, { danger = false, disabled = false } = {}) {
+  const button = document.createElement('button');
+  button.textContent = label;
+  button.role = 'menuitem';
+  button.disabled = disabled;
+  if (danger) button.className = 'danger';
+  button.addEventListener('click', () => {
+    ui.railMenu.hidePopover();
+    action();
+  });
+  return button;
+}
+
+function openRailMenu(target, items) {
+  ui.railMenu.replaceChildren(...items);
+  const box = target.getBoundingClientRect();
+  ui.railMenu.showPopover();
+  const menuBox = ui.railMenu.getBoundingClientRect();
+  const left = settings.railPosition === 'left' ? box.right + 6 : box.left - menuBox.width - 6;
+  ui.railMenu.style.left = `${Math.max(6, left)}px`;
+  ui.railMenu.style.top = `${Math.min(box.top, window.innerHeight - menuBox.height - 6)}px`;
+  ui.railMenu.querySelector('button:not(:disabled)')?.focus();
+}
+
+function appMenu(target, app) {
+  const index = settings.apps.findIndex((item) => item.id === app.id);
+  openRailMenu(target, [
+    menuButton('Open', () => openApp(app)),
+    menuButton('Edit…', () => openEditAppDialog(app)),
+    menuButton('Move up', () => moveApp(app, -1), { disabled: index === 0 }),
+    menuButton('Move down', () => moveApp(app, 1), { disabled: index === settings.apps.length - 1 }),
+    menuButton('Remove from rail', () => removeApp(app), { danger: true }),
+  ]);
+}
+
+function tabMenu(target, tab) {
+  openRailMenu(target, [
+    menuButton('Pin to rail', () => {
+      activate(tab.id);
+      togglePin();
+    }, { disabled: !tab.url }),
+    menuButton('Open in browser tab', () => chrome.tabs.create({ url: tab.url, windowId }), { disabled: !tab.url }),
+    menuButton('Close tab', () => closeTab(tab.id), { danger: true }),
+  ]);
 }
 
 // ---------- commands ----------
@@ -472,6 +659,7 @@ function reload() {
 }
 
 function newTab() {
+  if (ui.drawer.matches(':popover-open')) ui.drawer.hidePopover();
   openTab(homeUrl());
   if (!homeUrl()) focusAddress();
 }
@@ -479,7 +667,6 @@ function newTab() {
 function focusAddress() {
   if (view !== 'web') setView('web');
   ui.address.focus();
-  ui.address.select();
 }
 
 // Asks the service worker to rebuild network rules from the stored settings
@@ -513,37 +700,13 @@ async function loadCurrentBrowserTab() {
 }
 
 async function addShortcut(url, title) {
-  if (settings.shortcuts.some((item) => item.url === url)) {
-    showToast('Already in speed dial.');
-    return;
+  try {
+    settings = await updateSettings((current) => ({ shortcuts: addLink(current.shortcuts, { title, url }, SPEED_DIAL) }));
+    showToast('Added to speed dial.');
+    render();
+  } catch (error) {
+    showToast(error.message);
   }
-  if (settings.shortcuts.length >= MAX_SHORTCUTS) {
-    showToast(`Speed dial holds at most ${MAX_SHORTCUTS} shortcuts.`);
-    return;
-  }
-  settings = await updateSettings({ shortcuts: [...settings.shortcuts, { title, url }] });
-  showToast('Added to speed dial.');
-  render();
-}
-
-// Pins the active page to the rail, or unpins the app it belongs to. A newly
-// pinned page's tab becomes that app's tab.
-async function togglePin() {
-  const active = activeWebTab();
-  if (!active?.url) return;
-  const pinnedUrl = active.app || active.url;
-  if (isPinned(pinnedUrl)) {
-    settings = await updateSettings({ apps: settings.apps.filter((app) => app.url !== pinnedUrl) });
-    showToast('Unpinned from the rail.');
-  } else if (settings.apps.length >= MAX_APPS) {
-    showToast(`The rail holds at most ${MAX_APPS} apps.`);
-    return;
-  } else {
-    settings = await updateSettings({ apps: [...settings.apps, { title: tabLabel(active), url: active.url }] });
-    session = { ...session, tabs: session.tabs.map((tab) => (tab.id === active.id ? { ...tab, app: active.url } : tab)) };
-    showToast('Pinned to the rail.');
-  }
-  setSession(session);
 }
 
 function setZoom(direction) {
@@ -581,10 +744,7 @@ function runShortcut(code) {
   else if (/^Digit[1-9]$/.test(code)) {
     const n = Number(code.slice(5));
     const tab = n === 9 ? session.tabs.at(-1) : session.tabs[n - 1];
-    if (tab) {
-      setSession(model.activateTab(session, tab.id));
-      setView('web');
-    }
+    if (tab) activate(tab.id);
   }
 }
 
@@ -595,23 +755,51 @@ function submitQuery(text) {
   if (!url) return;
   const active = model.activeTab(session);
   // A rail app keeps its own tab on the app; anything typed there opens a new tab.
-  if (active && !active.app) navigate(active.id, url);
+  if (active && !appForTab(active)) navigate(active.id, url);
   else openUrlFromOutside(url);
   setView('web');
+}
+
+// Drag to reorder: rail apps (settings order) and tabs (session order).
+function bindReorder(container, itemSelector, keyOf, onDrop) {
+  let dragged = null;
+  container.addEventListener('dragstart', (event) => {
+    const item = event.target.closest(itemSelector);
+    if (!item) return;
+    dragged = keyOf(item);
+    item.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+  });
+  container.addEventListener('dragover', (event) => {
+    if (dragged !== null && event.target.closest(itemSelector)) event.preventDefault();
+  });
+  container.addEventListener('drop', (event) => {
+    const target = event.target.closest(itemSelector);
+    if (dragged === null || !target) return;
+    event.preventDefault();
+    onDrop(dragged, keyOf(target));
+  });
+  container.addEventListener('dragend', () => {
+    dragged = null;
+    render();
+  });
 }
 
 function bindEvents() {
   ui.addressForm.addEventListener('submit', (event) => {
     event.preventDefault();
+    const text = ui.address.value;
     ui.address.blur();
-    submitQuery(ui.address.value);
+    submitQuery(text);
   });
-  ui.address.addEventListener('focus', () => ui.address.select());
+  // The full URL while editing; the short form at rest.
+  ui.address.addEventListener('focus', () => {
+    if (view === 'web') ui.address.value = model.activeTab(session)?.url ?? '';
+    ui.address.select();
+  });
+  ui.address.addEventListener('blur', () => renderAddress(model.activeTab(session)));
   ui.address.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      ui.address.blur();
-      render();
-    }
+    if (event.key === 'Escape') ui.address.blur();
   });
   ui.dashboardSearch.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -621,75 +809,93 @@ function bindEvents() {
   ui.back.addEventListener('click', () => goHistory(-1));
   ui.forward.addEventListener('click', () => goHistory(1));
   ui.reload.addEventListener('click', reload);
-  ui.newTab.addEventListener('click', newTab);
+  $('new-tab').addEventListener('click', newTab);
+  $('drawer-new-tab').addEventListener('click', newTab);
+  $('add-app').addEventListener('click', openAddAppDialog);
 
   ui.rail.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    if (button.dataset.app) {
-      const app = settings.apps.find((item) => item.url === button.dataset.app);
+    if (button.dataset.closeId) {
+      closeTab(button.dataset.closeId);
+    } else if (button.dataset.appId) {
+      const app = appById(button.dataset.appId);
       if (app) openApp(app);
+    } else if (button.dataset.id) {
+      activate(button.dataset.id);
     } else if (button.dataset.view) {
       setView(view === button.dataset.view ? 'web' : button.dataset.view);
-    } else if (button.id === 'rail-pin') {
-      togglePin();
     } else if (button.id === 'rail-settings') {
       chrome.runtime.openOptionsPage();
     }
+  });
+  ui.rail.addEventListener('auxclick', (event) => {
+    const button = event.target.closest('.rail-tab');
+    if (button && event.button === 1) closeTab(button.dataset.id);
+  });
+  // Right-click, or the keyboard context-menu key, on an app or a tab.
+  ui.rail.addEventListener('contextmenu', (event) => {
+    const appButton = event.target.closest('.rail-app');
+    const tabButton = event.target.closest('.rail-tab');
+    if (appButton) {
+      const app = appById(appButton.dataset.appId);
+      if (!app) return;
+      event.preventDefault();
+      appMenu(appButton, app);
+    } else if (tabButton) {
+      const tab = session.tabs.find((item) => item.id === tabButton.dataset.id);
+      if (!tab) return;
+      event.preventDefault();
+      tabMenu(tabButton, tab);
+    }
+  });
+  bindReorder(ui.railApps, '.rail-app', (el) => el.dataset.app, (from, to) => {
+    appAction(() => changeApps((current) => moveLink(current, from, current.findIndex((app) => app.url === to), RAIL)));
+  });
+  bindReorder(ui.railTabs, '.rail-tab', (el) => el.dataset.id, (from, to) => {
+    setSession(model.moveTab(session, from, session.tabs.findIndex((tab) => tab.id === to)));
+  });
+  bindReorder(ui.tabs, '.tab', (el) => el.dataset.id, (from, to) => {
+    setSession(model.moveTab(session, from, session.tabs.findIndex((tab) => tab.id === to)));
   });
 
   ui.tabs.addEventListener('click', (event) => {
     const tabEl = event.target.closest('.tab');
     if (!tabEl) return;
-    if (event.target.closest('.close')) {
+    if (event.target.closest('[data-close-id]')) {
       closeTab(tabEl.dataset.id);
-    } else {
-      setSession(model.activateTab(session, tabEl.dataset.id));
-      setView('web');
+      return;
+    }
+    ui.drawer.hidePopover();
+    activate(tabEl.dataset.id);
+  });
+  ui.tabs.addEventListener('keydown', (event) => {
+    const tabEl = event.target.closest('.tab');
+    // Keys on the close button are that button's (Enter clicks it).
+    if (!tabEl || event.target !== tabEl) return;
+    if (event.key === 'Enter') {
+      ui.drawer.hidePopover();
+      activate(tabEl.dataset.id);
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      closeTab(tabEl.dataset.id);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      (event.key === 'ArrowDown' ? tabEl.nextElementSibling : tabEl.previousElementSibling)?.focus();
     }
   });
   ui.tabs.addEventListener('auxclick', (event) => {
     const tabEl = event.target.closest('.tab');
     if (tabEl && event.button === 1) closeTab(tabEl.dataset.id);
   });
-  ui.tabs.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      setSession(model.cycleTab(session, event.key === 'ArrowRight' ? 1 : -1));
-      ui.tabs.querySelector('[aria-selected="true"]')?.focus();
-    }
-  });
-  ui.tabstrip.addEventListener('dblclick', (event) => {
-    if (!event.target.closest('.tab, button')) newTab();
-  });
-
-  let draggedId = null;
-  ui.tabs.addEventListener('dragstart', (event) => {
-    const tabEl = event.target.closest('.tab');
-    if (!tabEl) return;
-    draggedId = tabEl.dataset.id;
-    tabEl.classList.add('dragging');
-    event.dataTransfer.effectAllowed = 'move';
-  });
-  ui.tabs.addEventListener('dragover', (event) => {
-    if (draggedId) event.preventDefault();
-  });
-  ui.tabs.addEventListener('drop', (event) => {
-    event.preventDefault();
-    const tabEl = event.target.closest('.tab');
-    if (!draggedId || !tabEl) return;
-    const toIndex = session.tabs.findIndex((tab) => tab.id === tabEl.dataset.id);
-    setSession(model.moveTab(session, draggedId, toIndex));
-  });
-  ui.tabs.addEventListener('dragend', () => {
-    draggedId = null;
-    render();
+  ui.drawer.addEventListener('toggle', (event) => {
+    if (event.newState === 'open') ui.tabs.querySelector('[aria-selected="true"]')?.focus();
   });
 
   ui.tiles.addEventListener('click', (event) => {
-    const remove = event.target.closest('[data-remove-index]');
+    const remove = event.target.closest('[data-remove-url]');
     if (remove) {
-      const index = Number(remove.dataset.removeIndex);
-      updateSettings({ shortcuts: settings.shortcuts.filter((_, i) => i !== index) });
+      updateSettings((current) => ({ shortcuts: removeLink(current.shortcuts, remove.dataset.removeUrl, SPEED_DIAL) }))
+        .catch((error) => showToast(error.message));
       return;
     }
     const link = event.target.closest('a[data-url]');
@@ -778,10 +984,23 @@ async function init() {
     showToast,
   });
   notes = initNotes({ textarea: $('notes'), status: $('notes-status'), copyButton: $('notes-copy'), showToast });
+  appDialog = initAppDialog({
+    dialog: $('app-dialog'),
+    form: $('app-form'),
+    heading: $('app-dialog-title'),
+    nameInput: $('app-name'),
+    urlInput: $('app-url'),
+    error: $('app-error'),
+    cancelButton: $('app-cancel'),
+  });
   const key = sessionKey();
   let stored = (await chrome.storage.session.get(key))[key];
   if (!stored && settings.restoreSession) stored = (await chrome.storage.local.get('lastSession')).lastSession;
   session = model.restoreSession(stored);
+  // Sessions saved before app ids tied tabs to an app's URL.
+  for (const tab of session.tabs) {
+    if (isHttpUrl(tab.app)) session = model.tieTab(session, tab.id, settings.apps.find((app) => app.url === tab.app)?.id ?? '');
+  }
   if (session.tabs.length === 0) session = model.addTab(session, { url: homeUrl() }).session;
   view = VIEWS.includes(stored?.view) ? stored.view : 'web';
   bindEvents();

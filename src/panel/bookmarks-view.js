@@ -3,7 +3,7 @@
 
 import { isHttpUrl } from '../shared/settings.js';
 import { isBrowserOnlyUrl } from '../shared/url.js';
-import { faviconFor } from './favicon.js';
+import { faviconFor } from '../shared/favicon.js';
 
 const ROOT_ID = '0';
 const MAX_RESULTS = 200;

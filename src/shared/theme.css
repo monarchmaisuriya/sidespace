@@ -1,42 +1,101 @@
-/* Colour and size tokens shared by the panel and the settings page.
-   data-theme on <html> is "light" or "dark"; without it the OS preference wins. */
+/* Design tokens shared by the panel and the settings page: the only place
+   fonts, sizes and colours are defined. data-theme on <html> is "light" or
+   "dark"; without it the OS preference wins. data-density="compact" scales
+   controls and text down one step. */
 :root {
   color-scheme: light dark;
-  --accent: #6d5dfc;
-  --bg: #ffffff;
-  --surface: #f3f3f6;
-  --surface-hover: #e8e8ee;
-  --border: #dcdce3;
-  --text: #1d1d22;
-  --text-muted: #6a6a75;
-  --danger: #c43b3b;
+
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-display: 40px;
+
+  /* Light: a warm counterpart to Vesper (Vesper itself is dark only). */
+  --accent: #b4561d;
+  --on-accent: #ffffff;
+  --mint: #12806a;
+  --bg: #fbfaf8;
+  --surface: #f2f0ec;
+  --surface-hover: #e7e4de;
+  --raised: #ffffff;
+  --border: #dedad3;
+  --text: #101010;
+  --text-muted: #5c5a57;
+  --danger: #c23b3b;
+  --shadow: 0 4px 16px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+
   --radius: 8px;
+  --radius-lg: 12px;
   --control: 30px;
   --gap: 6px;
-  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+/* Dark: Vesper by Rauno Freiberg (palette from github.com/vladzima/vesper-theme). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1c1c21;
-    --surface: #26262d;
-    --surface-hover: #31313a;
-    --border: #3a3a44;
-    --text: #ececf1;
-    --text-muted: #a0a0ab;
+    --accent: #ffc799;
+    --on-accent: #000000;
+    --mint: #99ffe4;
+    --bg: #101010;
+    --surface: #161616;
+    --surface-hover: #232323;
+    --raised: #1c1c1c;
+    --border: #282828;
+    --text: #ffffff;
+    --text-muted: #a0a0a0;
+    --danger: #ff8080;
+    --shadow: 0 8px 24px rgb(0 0 0 / 0.6);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1c1c21;
-  --surface: #26262d;
-  --surface-hover: #31313a;
-  --border: #3a3a44;
-  --text: #ececf1;
-  --text-muted: #a0a0ab;
+  --accent: #ffc799;
+  --on-accent: #000000;
+  --mint: #99ffe4;
+  --bg: #101010;
+  --surface: #161616;
+  --surface-hover: #232323;
+  --raised: #1c1c1c;
+  --border: #282828;
+  --text: #ffffff;
+  --text-muted: #a0a0a0;
+  --danger: #ff8080;
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.6);
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-density="compact"] {
-  --control: 24px;
-  --gap: 3px;
-  font-size: 12px;
+  --text-md: 12px;
+  --text-lg: 13px;
+  --control: 26px;
+  --gap: 4px;
 }
+
+/* Every control and text element uses the page font. Chrome gives extension
+   pages its own body font and form controls their own font, so both are
+   overridden here, on body as well as html. */
+html, body {
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea, output {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+code, kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+h1, h2, h3 { font-weight: 600; }
+
+/* Site icons drawn for light backgrounds (GitHub's black mark, for one)
+   vanish on Vesper's near-black; a thin light halo keeps them visible. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .favicon img { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.85)); }
+}
+:root[data-theme="dark"] .favicon img { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.85)); }

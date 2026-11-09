@@ -1,4 +1,4 @@
-<p align="center"><img src="icons/icon-128.png" width="96" alt="Sidespace logo"></p>
+<p align="center"><img src="sidespace.png" width="160" alt="Sidespace logo"></p>
 
 # Sidespace
 
@@ -7,8 +7,8 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 ## Features
 
 - **Any site in the side panel**, including sites that normally refuse to be embedded (see [How embedding works](#how-embedding-works)).
-- **App rail**: a dock on the panel edge with pinned web apps. ChatGPT, Gemini, Claude and Perplexity are pinned by default; pin any page from the menu. Each app keeps its own panel tab, so switching back is instant. Rail on the left, right, or hidden.
-- **Panel tabs**: tab strip, drag to reorder, middle-click to close, double-click the strip for a new tab.
+- **App rail**: a dock on the panel edge with pinned web apps. ChatGPT, Gemini, Claude and Perplexity are pinned by default. Add any site with the **+** under the apps, right-click an app to edit, move or remove it, or drag it to reorder; the settings page has the same editor. Each app keeps its own panel tab, so switching back is instant. Rail on the left, right, or hidden.
+- **Panel tabs**: open tabs sit in the rail under the apps (or only in the tab list, if you prefer); the tab count button in the toolbar lists every tab with its full title. Drag to reorder, middle-click or hover **×** to close.
 - **Navigation**: address bar that takes a URL or a search, back, forward, reload. Each tab has its own history; the address bar follows link clicks and single-page-app navigation.
 - **Dashboard**: the new tab page shows a clock, a search box, and your speed dial shortcuts.
 - **Bookmarks**: browse folders and search your Chrome bookmarks inside the panel, and bookmark the panel page. Chrome asks for bookmark access the first time.
@@ -18,7 +18,8 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 - **Ways in**: toolbar icon, `Alt+Shift+S`, right-click "Open link / this page in Sidespace", "Search Sidespace for …", `Alt+Shift+D` to move the current page into the panel, and "Load current browser tab here" in the panel menu. "Open in browser tab" goes the other way.
 - **New-window links** (`target=_blank`, including via `<base>`) and `window.open(url, '_blank', 'noopener')` calls made while you are using the page (a click or key press in the last few seconds) become new panel tabs, or browser tabs if you prefer.
 - **Session restore**: panel tabs and their history come back when you reopen the panel, and after restarting Chrome. Restored tabs load only when you switch to them.
-- **Customisation**: theme (system, light, dark), accent colour, density, rail position, clock, search engine (Google, DuckDuckGo, Bing, Brave, or a custom `%s` template), home page, tab strip mode, rail apps and speed dial order, settings export and import.
+- **Look**: a dark theme in the [Vesper](https://github.com/vladzima/vesper-theme) palette and a matching light theme, one consistent font scale, real site icons where Chrome has them, and an address bar that shows `example.com/path` until you click it.
+- **Customisation**: theme (system, light, dark), accent colour (theme default or a swatch), density, rail position, where open tabs show, clock, search engine (Google, DuckDuckGo, Bing, Brave, or a custom `%s` template), home page, rail apps and speed dial (add, edit, reorder, remove), settings export and import.
 
 ### Keyboard (inside the panel)
 
@@ -87,6 +88,7 @@ Other safeguards:
 | `declarativeNetRequestWithHostAccess` + `<all_urls>` | Remove framing headers and set the mobile user agent for panel frames only; host access also lets sites in the panel use your normal cookies |
 | `storage` | Settings, speed dial, rail apps, notes, open panel tabs |
 | `contextMenus` | Right-click entries |
+| `favicon` | Site icons from Chrome's own icon store, without contacting the site |
 | `bookmarks` (optional) | Bookmarks view; requested only when you open it |
 | Content scripts on all pages | Exit at once unless the page is a frame directly inside the Sidespace panel. There, one reports URL and title and routes cross-site links; a second, in the page's own JavaScript world, offers `window.open(…, 'noopener')` calls to the first. Pages in that panel can tell the second one is present (`window.open` is wrapped) |
 
@@ -126,6 +128,6 @@ The end-to-end tests launch Chromium with the extension loaded, open the real si
 | `src/options/` | Settings page |
 | `src/content/frame-bridge.js` | Content script for pages shown in the panel |
 | `src/content/window-open.js` | Main-world hook that offers `noopener` popups to the bridge |
-| `src/shared/` | Settings, URL handling, network rules, inbox, theme |
+| `src/shared/` | Settings, rail app and speed dial lists, URL handling, network rules, inbox, site icons, theme tokens |
 | `icons/` | Toolbar and store icons, rendered from `sidespace.png` |
 | `tests/unit/`, `tests/e2e/` | Tests |

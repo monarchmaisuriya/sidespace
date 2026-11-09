@@ -1,12 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_SETTINGS, MAX_SHORTCUTS, normalizeHostname, normalizeSettings, searchTemplate,
+  DEFAULT_SETTINGS, MAX_SHORTCUTS, looksLikeSettings, normalizeHostname, normalizeSettings, searchTemplate,
 } from '../../src/shared/settings.js';
 
-test('missing or non-object input gives the defaults', () => {
-  assert.deepEqual(normalizeSettings(undefined), JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
-  assert.deepEqual(normalizeSettings('nope'), JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+test('missing or non-object input gives the defaults, versioned, with app ids', () => {
+  for (const input of [undefined, 'nope']) {
+    const { settingsVersion, apps, ...rest } = normalizeSettings(input);
+    const { apps: defaultApps, ...defaultRest } = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    assert.deepEqual(rest, defaultRest);
+    assert.equal(settingsVersion, 2);
+    assert.deepEqual(apps.map(({ title, url }) => ({ title, url })), defaultApps);
+    assert.ok(apps.every((app) => /^app-[a-z0-9]+$/.test(app.id)));
+  }
+});
+
+test('app ids are the same on every read of settings without ids, unique, and kept once stored', () => {
+  const legacy = { apps: [{ title: 'A', url: 'https://a.example/' }, { title: 'B', url: 'https://b.example/' }] };
+  const first = normalizeSettings(legacy).apps;
+  assert.deepEqual(normalizeSettings(legacy).apps, first);
+  assert.notEqual(first[0].id, first[1].id);
+  const edited = normalizeSettings({ apps: [{ ...first[0], url: 'https://elsewhere.example/' }] }).apps;
+  assert.equal(edited[0].id, first[0].id);
+  const clash = normalizeSettings({ apps: [{ id: 'app-x', title: 'A', url: 'https://a.example/' }, { id: 'app-x', title: 'B', url: 'https://b.example/' }] }).apps;
+  assert.equal(clash[0].id, 'app-x');
+  assert.notEqual(clash[1].id, 'app-x');
 });
 
 test('invalid choices and types fall back to the default for that key only', () => {
@@ -47,7 +65,7 @@ test('rail apps: missing list gives presets, an empty list stays empty, duplicat
   assert.deepEqual(normalizeSettings({}).apps.map((a) => a.title), ['ChatGPT', 'Gemini', 'Claude', 'Perplexity']);
   assert.deepEqual(normalizeSettings({ apps: [] }).apps, []);
   const s = normalizeSettings({ apps: [{ url: 'https://x.example/' }, { url: 'https://x.example/' }, { url: 'ftp://y' }] });
-  assert.deepEqual(s.apps, [{ title: 'x.example', url: 'https://x.example/' }]);
+  assert.deepEqual(s.apps.map(({ title, url }) => ({ title, url })), [{ title: 'x.example', url: 'https://x.example/' }]);
   assert.equal(normalizeSettings({ railPosition: 'top' }).railPosition, 'right');
 });
 
@@ -57,4 +75,22 @@ test('normalizeHostname rejects junk', () => {
   assert.equal(normalizeHostname('a..b'), '');
   assert.equal(normalizeHostname('-x.com'), '');
   assert.equal(normalizeHostname('m.youtube.com'), 'm.youtube.com');
+});
+
+test('a settings file is an object with at least one known setting', () => {
+  assert.equal(looksLikeSettings({ theme: 'dark' }), true);
+  assert.equal(looksLikeSettings({ theme: 'neon', extra: 1 }), true);
+  assert.equal(looksLikeSettings({ name: 'pkg', version: '1.0.0' }), false);
+  assert.equal(looksLikeSettings({}), false);
+  assert.equal(looksLikeSettings([]), false);
+  assert.equal(looksLikeSettings(null), false);
+  assert.equal(looksLikeSettings(42), false);
+});
+
+test('accent: empty means the theme accent, the old fixed default migrates once, a colour is kept', () => {
+  assert.equal(normalizeSettings({}).accent, '');
+  assert.equal(normalizeSettings({ accent: '#6D5DFC' }).accent, '');
+  assert.equal(normalizeSettings({ accent: '#6d5dfc', settingsVersion: 2 }).accent, '#6d5dfc');
+  assert.equal(normalizeSettings({ accent: '#FFC799' }).accent, '#ffc799');
+  assert.equal(normalizeSettings({ accent: 'red' }).accent, '');
 });
