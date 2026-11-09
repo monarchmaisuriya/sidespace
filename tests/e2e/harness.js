@@ -3,7 +3,7 @@
 // binary to use one other than Playwright's own.
 import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
-import { mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,42 @@ const ROUTES = {
     }, 300);`),
   }),
   '/icon-elsewhere': (req) => ({ body: `<!doctype html><title>Icon</title><link rel="icon" href="${otherOrigin(req)}/track-icon"><h1>icon page</h1>` }),
+  '/set-login': () => ({
+    headers: {
+      'Set-Cookie': [
+        'lax_session=1; Path=/; SameSite=Lax',
+        'strict_session=1; Path=/; SameSite=Strict',
+        'none_session=1; Path=/; SameSite=None; Secure',
+      ],
+    },
+    body: page('Set login', 'logged in', "localStorage.setItem('login', 'yes');"),
+  }),
+  '/whoami': (req) => ({
+    body: `<!doctype html><title>Whoami</title><h1>whoami</h1><pre id="cookies">${req.headers.cookie ?? ''}</pre><pre id="storage"></pre>
+<script>document.getElementById('storage').textContent = localStorage.getItem('login') ?? 'none';</script>`,
+  }),
+  '/opener-timer': () => ({
+    body: page('Opener timer', 'opener timer page', `setTimeout(() => {
+      window.open('/second?via=timer', '_blank', 'noopener');
+      document.title = 'Timer fired';
+    }, 300);`),
+  }),
+  '/forged-alive': () => ({
+    body: page('Forged', 'forged page', `setTimeout(() => {
+      parent.postMessage({ type: 'sidespace:frame-alive', token: 'forged-token' }, '*');
+      parent.postMessage({ type: 'sidespace:frame-alive', token: '' }, '*');
+    }, 200);
+    setTimeout(() => { document.title = 'Title after forgery'; }, 700);`),
+  }),
+  '/opener-base': () => ({
+    body: `<!doctype html><title>Opener base</title><base href="/base/"><h1>opener base page</h1>
+      <button id="open-relative" onclick="window.open('second?via=base', '_blank', 'noopener')">relative</button>`,
+  }),
+  '/opener': () => ({
+    body: page('Opener', 'opener page').replace('</h1>', `</h1>
+      <button id="open-noopener" onclick="window.open('/second?via=noopener', '_blank', 'noopener')">noopener</button>
+      <button id="open-plain" onclick="window.open('/second?via=plain')">plain</button>`),
+  }),
   '/ua': (req) => ({ body: `<!doctype html><title>UA</title><h1>ua</h1><pre id="ua">${req.headers['user-agent']}</pre>` }),
   '/search': (req) => ({ body: page('Search', `search ${new URL(req.url, 'http://x').searchParams.get('q')}`) }),
 };
@@ -79,16 +115,32 @@ function freePort() {
   });
 }
 
-export async function launch() {
+// A copy of the extension with "bookmarks" as a required permission: Chrome's
+// permission prompt cannot be clicked from automation, and a required
+// permission needs no prompt. Everything else is the shipped code.
+function extensionWithBookmarks() {
+  const root = mkdtempSync(join(tmpdir(), 'sidespace-ext-'));
+  for (const item of ['manifest.json', 'src', 'icons']) cpSync(join(EXTENSION_ROOT, item), join(root, item), { recursive: true });
+  const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+  manifest.permissions.push('bookmarks');
+  manifest.optional_permissions = manifest.optional_permissions.filter((name) => name !== 'bookmarks');
+  writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest));
+  return root;
+}
+
+export async function launch({ grantBookmarks = false } = {}) {
+  const extensionRoot = grantBookmarks ? extensionWithBookmarks() : EXTENSION_ROOT;
   const site = await startSite();
   const { port } = site.address();
   const debugPort = await freePort();
   const context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'sidespace-')), {
-    executablePath: process.env.SIDESPACE_CHROME || undefined,
+    // The 'chromium' channel is the full browser in headless mode; Playwright's
+    // default headless shell cannot load extensions.
+    ...(process.env.SIDESPACE_CHROME ? { executablePath: process.env.SIDESPACE_CHROME } : { channel: 'chromium' }),
     headless: true,
     args: [
-      `--disable-extensions-except=${EXTENSION_ROOT}`,
-      `--load-extension=${EXTENSION_ROOT}`,
+      `--disable-extensions-except=${extensionRoot}`,
+      `--load-extension=${extensionRoot}`,
       `--remote-debugging-port=${debugPort}`,
     ],
   });
@@ -128,6 +180,7 @@ export async function launch() {
   }
 
   return {
+    context,
     worker,
     extensionId,
     base: `http://127.0.0.1:${port}`,

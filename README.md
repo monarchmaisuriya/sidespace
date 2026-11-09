@@ -16,7 +16,7 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 - **Mobile view**: ask chosen sites (or all sites) for their mobile version, which suits the narrow panel.
 - **Per-tab zoom**.
 - **Ways in**: toolbar icon, `Alt+Shift+S`, right-click "Open link / this page in Sidespace", "Search Sidespace for …", `Alt+Shift+D` to move the current page into the panel, and "Load current browser tab here" in the panel menu. "Open in browser tab" goes the other way.
-- **New-window links** (`target=_blank`, including via `<base>`) become new panel tabs, or browser tabs if you prefer.
+- **New-window links** (`target=_blank`, including via `<base>`) and `window.open(url, '_blank', 'noopener')` calls made while you are using the page (a click or key press in the last few seconds) become new panel tabs, or browser tabs if you prefer.
 - **Session restore**: panel tabs and their history come back when you reopen the panel, and after restarting Chrome. Restored tabs load only when you switch to them.
 - **Customisation**: theme (system, light, dark), accent colour, density, rail position, clock, search engine (Google, DuckDuckGo, Bing, Brave, or a custom `%s` template), home page, tab strip mode, rail apps and speed dial order, settings export and import.
 
@@ -34,12 +34,19 @@ These also work while a web page in the panel has focus, except inside text fiel
 
 ## Install (unpacked)
 
-1. Clone this repository.
+1. Download `sidespace-<version>.zip` from the [latest release](https://github.com/monarchmaisuriya/sidespace/releases/latest) and unzip it, or clone this repository.
 2. Open `chrome://extensions`, turn on **Developer mode**.
-3. Click **Load unpacked** and pick the repository folder.
+3. Click **Load unpacked** and pick the unzipped (or cloned) folder.
 4. Click the Sidespace icon (pin it from the puzzle menu) or press `Alt+Shift+S`.
 
 Requires Chrome 128 or newer.
+
+## Signing in
+
+The panel uses your normal Chrome sign-ins: sites in the panel get the same cookies and site storage as your tabs. If you are signed in to a site in a tab, you are signed in to it in the panel.
+
+- Sign-in pages that refuse to load in a frame (Google's, for one: Google blocks sign-in inside embedded frames) can be done in a normal tab. Sign in there, then reload the panel tab.
+- Sign-in popups ("Sign in with …" windows) open as real popups, so they can hand the result back to the page that opened them.
 
 ## How embedding works
 
@@ -69,7 +76,7 @@ Other safeguards:
 
 - Frames are sandboxed without `allow-top-navigation`, so a page cannot replace the panel.
 - The address bar origin always comes from the browser. A page can change its path with `history.pushState`, but it cannot make the address bar show a different site.
-- Only real user input counts: scripted key presses or clicks in a page cannot trigger panel shortcuts or open tabs, and only the visible tab can.
+- Only real user input counts: scripted key presses or clicks in a page cannot trigger panel shortcuts or open tabs, and only the visible tab can. A `window.open` call becomes a panel tab only while you are interacting with that page (Chrome's user activation: a click or key press in the last few seconds).
 - Site icons are loaded only from the page's own origin.
 
 ## Permissions
@@ -81,7 +88,7 @@ Other safeguards:
 | `storage` | Settings, speed dial, rail apps, notes, open panel tabs |
 | `contextMenus` | Right-click entries |
 | `bookmarks` (optional) | Bookmarks view; requested only when you open it |
-| Content script on all pages | Exits at once unless the page is a frame directly inside the Sidespace panel; there it reports URL and title and routes cross-site links |
+| Content scripts on all pages | Exit at once unless the page is a frame directly inside the Sidespace panel. There, one reports URL and title and routes cross-site links; a second, in the page's own JavaScript world, offers `window.open(…, 'noopener')` calls to the first. Pages in that panel can tell the second one is present (`window.open` is wrapped) |
 
 Sidespace is not available in incognito windows: panel pages would use your regular cookies there.
 
@@ -91,7 +98,8 @@ Nothing leaves your browser. There is no server and no analytics. With **Restore
 
 - `chrome://`, `file://` and Chrome Web Store pages cannot be framed; Sidespace opens them in a browser tab.
 - Mobile view changes the user agent the server sees, not `navigator.userAgent` seen by page scripts.
-- `window.open()` from a page opens a browser tab; only new-window links are turned into panel tabs.
+- `window.open()` without `noopener` opens a real popup, on purpose: sign-in popups need the link back to the page.
+- A form that posts to a different site which forbids framing (some single sign-on flows) cannot be shown in the panel; Sidespace offers "Open in a browser tab". Resubmitting the form from the panel would change its `Origin` header and pass its fields, often passwords, through the extension, so it does not.
 - Some sites detect being framed in other ways; use **Open in browser tab** for those.
 - With panels open in several windows, the most recently changed one is what restores after a Chrome restart.
 
@@ -103,9 +111,10 @@ No build step; the extension runs straight from the source tree.
 npm install
 npm test            # unit tests (node:test)
 npm run test:e2e    # end-to-end tests in a real side panel (Playwright)
+npm run test:live   # loads real websites in the panel (needs network)
 ```
 
-The end-to-end tests launch Chromium with the extension loaded, open the real side panel, and drive it over the Chrome DevTools Protocol. They use Playwright's Chromium (`npx playwright install chromium`), or set `SIDESPACE_CHROME` to another Chromium or Chrome for Testing binary. Branded Google Chrome does not allow loading unpacked extensions from the command line.
+The end-to-end tests launch Chromium with the extension loaded, open the real side panel, and drive it over the Chrome DevTools Protocol. They use Playwright's Chromium (`npx playwright install chromium`), or set `SIDESPACE_CHROME` to another Chromium or Chrome for Testing binary. The Chrome versions each release was tested on are listed in [CHANGELOG.md](CHANGELOG.md). The bookmarks tests run against a temporary copy of the extension with bookmark access already granted, because automation cannot click Chrome's permission prompt. Branded Google Chrome does not allow loading unpacked extensions from the command line.
 
 ### Layout
 
@@ -116,6 +125,7 @@ The end-to-end tests launch Chromium with the extension loaded, open the real si
 | `src/panel/` | Side panel UI, the pure tab model (`session.js`), bookmarks and notes views |
 | `src/options/` | Settings page |
 | `src/content/frame-bridge.js` | Content script for pages shown in the panel |
+| `src/content/window-open.js` | Main-world hook that offers `noopener` popups to the bridge |
 | `src/shared/` | Settings, URL handling, network rules, inbox, theme |
 | `icons/` | Toolbar and store icons, rendered from `sidespace.png` |
 | `tests/unit/`, `tests/e2e/` | Tests |

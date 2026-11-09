@@ -4,9 +4,12 @@
 //   origin matches the browser-provided sender.url),
 // - hands cross-site navigations of this frame to the panel, which loads them
 //   itself (see src/shared/rules.js for why that matters),
-// - optionally opens new-window links as new panel tabs,
+// - optionally opens new-window links, and window.open calls offered by
+//   window-open.js, as new panel tabs,
 // - forwards panel keyboard shortcuts typed while the page has focus.
-// Only real user input (event.isTrusted) can open tabs or trigger shortcuts.
+// Only user input can open tabs or trigger shortcuts: clicks and keys must be
+// real (event.isTrusted), and window.open calls are honoured only while the
+// user is interacting with the page (navigator.userActivation).
 (() => {
   const EXTENSION_ORIGIN = new URL(chrome.runtime.getURL('')).origin;
   const isPanelPage = window !== window.top
@@ -59,6 +62,9 @@
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.origin !== EXTENSION_ORIGIN) return;
     if (event.data?.type === 'sidespace:config') openLinksInPanel = event.data.openLinksInPanel === true;
+    // "Still here" answer to the panel's check after a load. A separate
+    // message from the hello, so answering can never re-link this document.
+    if (event.data?.type === 'sidespace:ping') window.parent.postMessage({ type: 'sidespace:frame-alive', token }, EXTENSION_ORIGIN);
   });
 
   // The panel unlocks framing headers only for loads it starts and for
@@ -88,6 +94,26 @@
     if (!/^https?:$/.test(new URL(anchor.href).protocol)) return;
     event.preventDefault();
     send({ type: 'sidespace:open-tab', url: anchor.href });
+  });
+
+  // window-open.js asks at start-up whether it is in a Sidespace frame; only
+  // this listener (registered only in Sidespace frames) says yes.
+  window.addEventListener('sidespace:window-open-probe', (event) => event.preventDefault());
+
+  // window.open(url, '_blank', 'noopener') offered by window-open.js. The
+  // event comes from the page's world, so it is never isTrusted; the control
+  // is that the user is interacting with this frame right now.
+  window.addEventListener('sidespace:window-open', (event) => {
+    if (!openLinksInPanel || !navigator.userActivation?.isActive || typeof event.detail !== 'string') return;
+    let url;
+    try {
+      url = new URL(event.detail);
+    } catch {
+      return;
+    }
+    if (!/^https?:$/.test(url.protocol)) return;
+    event.preventDefault();
+    send({ type: 'sidespace:open-tab', url: url.href });
   });
 
   const SHORTCUT_CODES = new Set(['KeyL', 'KeyT', 'KeyW', 'KeyR', 'ArrowLeft', 'ArrowRight',

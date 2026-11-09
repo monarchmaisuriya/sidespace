@@ -33,6 +33,23 @@ test.describe('loading pages', () => {
     await expect(panel.locator('#load-hint')).toBeHidden();
   });
 
+  test('an extra load event from a page that is still there shows no hint', async () => {
+    await go(panel, `${env.base}/plain`);
+    await expect(activeFrame(panel).locator('h1')).toHaveText('plain page');
+    await panel.locator('iframe.frame:not([hidden])').dispatchEvent('load');
+    await panel.waitForTimeout(1500);
+    await expect(panel.locator('#load-hint')).toBeHidden();
+  });
+
+  test('a site you are signed in to in a normal tab is signed in inside the panel', async () => {
+    const tab = await env.context.newPage();
+    await tab.goto(`${env.base}/set-login`);
+    await tab.close();
+    await go(panel, `${env.base}/whoami`);
+    await expect(activeFrame(panel).locator('#cookies')).toHaveText('lax_session=1; strict_session=1; none_session=1');
+    await expect(activeFrame(panel).locator('#storage')).toHaveText('yes');
+  });
+
   test('a page sending X-Frame-Options: DENY still renders', async () => {
     await go(panel, `${env.base}/xfo`);
     await expect(activeFrame(panel).locator('h1')).toHaveText('xfo page');
@@ -100,6 +117,12 @@ test.describe('security', () => {
     await expect.poll(() => activeTitle(panel)).toBe('Icon');
     await panel.waitForTimeout(1500);
     expect(requestLog).not.toContain('/track-icon');
+  });
+
+  test('a page sending forged "still here" messages cannot take over its tab link', async () => {
+    await go(panel, `${env.base}/forged-alive`);
+    await expect.poll(() => activeTitle(panel)).toBe('Title after forgery');
+    await expect(address()).toHaveValue(`${env.base}/forged-alive`);
   });
 
   test('with framing unlock off, a DENY page is blocked and the hint appears', async () => {
@@ -171,6 +194,49 @@ test.describe('navigation', () => {
     await expect(address()).toHaveValue(`${env.base}/second`);
   });
 
+  test('window.open with noopener during a click opens a panel tab, not a window', async () => {
+    await go(panel, `${env.base}/opener`);
+    await expect.poll(() => activeTitle(panel)).toBe('Opener');
+    const before = await panel.locator('.tab').count();
+    const pagesBefore = env.context.pages().length;
+    await activeFrame(panel).locator('#open-noopener').click();
+    await expect(panel.locator('.tab')).toHaveCount(before + 1);
+    await expect(address()).toHaveValue(`${env.base}/second?via=noopener`);
+    expect(env.context.pages().length).toBe(pagesBefore);
+  });
+
+  test("window.open resolves a relative URL against the page's base URL", async () => {
+    await go(panel, `${env.base}/opener-base`);
+    await expect.poll(() => activeTitle(panel)).toBe('Opener base');
+    await activeFrame(panel).locator('#open-relative').click();
+    await expect(address()).toHaveValue(`${env.base}/base/second?via=base`);
+  });
+
+  test('window.open with noopener but no user interaction goes to the real window.open', async () => {
+    // Playwright turns Chrome's popup blocker off, so the real call opens a
+    // browser tab; that tab is the proof the panel did not take the call.
+    const tabsBefore = await panel.locator('.tab').count();
+    const popup = env.context.waitForEvent('page');
+    await go(panel, `${env.base}/opener-timer`);
+    const opened = await popup;
+    expect(opened.url()).toBe(`${env.base}/second?via=timer`);
+    await opened.close();
+    await expect.poll(() => activeTitle(panel)).toBe('Timer fired');
+    await expect(panel.locator('.tab')).toHaveCount(tabsBefore);
+  });
+
+  test('window.open without noopener keeps the real popup, so sign-in popups still work', async () => {
+    await go(panel, `${env.base}/opener`);
+    await expect.poll(() => activeTitle(panel)).toBe('Opener');
+    const before = await panel.locator('.tab').count();
+    const popup = env.context.waitForEvent('page');
+    await activeFrame(panel).locator('#open-plain').click();
+    const opened = await popup;
+    expect(opened.url()).toBe(`${env.base}/second?via=plain`);
+    await opened.close();
+    await expect(panel.locator('.tab')).toHaveCount(before);
+  });
+
   test('a URL sent from the service worker inbox opens as a tab', async () => {
     const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
     await env.worker.evaluate(async ({ id, url }) => {
@@ -230,7 +296,7 @@ test.describe('rail, views and dashboard', () => {
     await expect(panel.locator('#notes-view')).toBeHidden();
   });
 
-  test('the bookmarks view asks for access before showing anything', async () => {
+  test('the bookmarks view asks for access before showing anything (without the permission)', async () => {
     await panel.click('.rail-button[data-view="bookmarks"]');
     await expect(panel.locator('#bookmark-permission')).toBeVisible();
     await expect(panel.locator('#bookmark-list li')).toHaveCount(0);

@@ -76,8 +76,8 @@ const earlyStates = new Map(); // token -> { senderUrl, message } that arrived b
 // redirect), 'push' when the page navigated by itself.
 const tokenMode = new Map(); // token -> 'replace' | 'push'
 const pendingLoads = new Set(); // panel tab ids the panel just loaded
-const helloCount = new Map(); // panel tab id -> hellos received
-const helloAtLastLoad = new Map(); // panel tab id -> helloCount when the last load was checked
+const linkedSinceCheck = new Set(); // panel tab ids where a new page linked since the last load check
+const answeredTabs = new Set(); // panel tab ids whose page answered the last ping
 const hintTabs = new Set(); // panel tab ids whose page seems not to have loaded
 
 // ---------- session ----------
@@ -205,19 +205,30 @@ function dropFrame(tabId) {
   frames.delete(tabId);
   unlinkTab(tabId);
   pendingLoads.delete(tabId);
-  helloCount.delete(tabId);
-  helloAtLastLoad.delete(tabId);
+  linkedSinceCheck.delete(tabId);
+  answeredTabs.delete(tabId);
   hintTabs.delete(tabId);
 }
 
-// A page that loaded but never said hello is usually an error page (blocked
-// framing, network error) or a page Chrome keeps scripts out of.
+// After every frame load: if a new page linked since the last check, the
+// load was that page. Otherwise ask the frame whether a page with our content
+// script is still there. No answer usually means an error page (blocked
+// framing, network error) or a page Chrome keeps scripts out of. Asking,
+// instead of counting load events, keeps the answer right when a frame fires
+// extra load events.
 function checkLoaded(tabId) {
+  if (linkedSinceCheck.delete(tabId)) {
+    hintTabs.delete(tabId);
+    renderHint();
+    return;
+  }
+  answeredTabs.delete(tabId);
+  postToFrame(tabId, { type: 'sidespace:ping' });
   setTimeout(() => {
-    const hellos = helloCount.get(tabId) ?? 0;
-    if (hellos > (helloAtLastLoad.get(tabId) ?? 0)) hintTabs.delete(tabId);
+    if (answeredTabs.has(tabId)) hintTabs.delete(tabId);
     else hintTabs.add(tabId);
-    helloAtLastLoad.set(tabId, hellos);
+    // A hello that arrived after its own load event was settled by this ping.
+    linkedSinceCheck.delete(tabId);
     renderHint();
   }, HINT_DELAY_MS);
 }
@@ -232,17 +243,27 @@ function postToFrame(tabId, message) {
 
 window.addEventListener('message', (event) => {
   const { data } = event;
-  if (data?.type !== 'sidespace:frame-hello' || typeof data.token !== 'string' || data.token.length > 64) return;
+  const isFrameMessage = data?.type === 'sidespace:frame-hello' || data?.type === 'sidespace:frame-alive';
+  if (!isFrameMessage || typeof data.token !== 'string' || data.token.length > 64) return;
   const entry = [...frames].find(([, frame]) => frame.contentWindow === event.source);
   if (!entry) return;
   const [tabId] = entry;
+  if (data.type === 'sidespace:frame-alive') {
+    // Counts only for the page now linked to this tab, never links one.
+    if (linkedToken.get(tabId) === data.token) {
+      answeredTabs.add(tabId);
+      hintTabs.delete(tabId);
+      renderHint();
+    }
+    return;
+  }
+  linkedSinceCheck.add(tabId);
+  hintTabs.delete(tabId);
   unlinkTab(tabId);
   tokenToTab.set(data.token, tabId);
   linkedToken.set(tabId, data.token);
   tokenMode.set(data.token, pendingLoads.has(tabId) ? 'replace' : 'push');
   pendingLoads.delete(tabId);
-  helloCount.set(tabId, (helloCount.get(tabId) ?? 0) + 1);
-  hintTabs.delete(tabId);
   event.source.postMessage(frameConfig(), '*');
   const early = earlyStates.get(data.token);
   earlyStates.delete(data.token);

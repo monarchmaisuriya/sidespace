@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sidespace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Open any website as tabs in Chrome's side panel.",
   "minimum_chrome_version": "128",
   "icons": {
@@ -40,6 +40,13 @@
       "js": ["src/content/frame-bridge.js"],
       "all_frames": true,
       "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/window-open.js"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "commands": {
