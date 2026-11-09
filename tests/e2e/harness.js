@@ -98,6 +98,8 @@ const ROUTES = {
     body: readFileSync(join(EXTENSION_ROOT, 'icons/icon-48.png')),
   }),
   '/ua': (req) => ({ body: `<!doctype html><title>UA</title><h1>ua</h1><pre id="ua">${req.headers['user-agent']}</pre>` }),
+  // Echoes Sec-Fetch-Dest, which some sites (Google) use to refuse frames.
+  '/fetch-dest': (req) => ({ body: `<!doctype html><title>Dest</title><h1>dest</h1><pre id="dest">${req.headers['sec-fetch-dest']}</pre><a id="again" href="/fetch-dest?again">again</a>` }),
   '/search': (req) => ({ body: page('Search', `search ${new URL(req.url, 'http://x').searchParams.get('q')}`) }),
 };
 

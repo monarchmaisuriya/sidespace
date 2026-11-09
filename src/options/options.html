@@ -18,6 +18,7 @@
     <nav class="toc" aria-label="Sections">
       <a href="#appearance">Appearance</a>
       <a href="#rail">Rail apps</a>
+      <a href="#new-tab-page">New tab page</a>
       <a href="#speed-dial">Speed dial</a>
       <a href="#browsing">Browsing</a>
       <a href="#embedding">Embedding</a>
@@ -72,7 +73,6 @@
               <option value="drawer">Only in the tab list</option>
             </select>
           </div>
-          <label class="row check"><span class="label">Show clock and date on the new tab page</span><input type="checkbox" name="showClock"></label>
         </section>
 
         <section id="rail">
@@ -87,6 +87,61 @@
           </div>
           <p class="form-error" id="apps-error" role="alert" hidden></p>
           <div class="buttons"><button type="button" id="apps-reset">Restore default apps</button></div>
+        </section>
+
+        <section id="new-tab-page">
+          <h2>New tab page</h2>
+          <p class="help">What a new panel tab shows, unless a home page address is set under Browsing.</p>
+          <div class="stack">
+            <span class="label">Parts, top to bottom</span>
+            <ol class="part-list" id="home-sections" aria-label="New tab page parts"></ol>
+          </div>
+          <div class="row">
+            <div><span class="label">Clock</span></div>
+            <select name="clockFormat">
+              <option value="auto">Auto (Chrome's language)</option>
+              <option value="12">12-hour</option>
+              <option value="24">24-hour</option>
+            </select>
+          </div>
+          <div class="row">
+            <div><span class="label">Background</span></div>
+            <div class="inline">
+              <input type="color" id="home-background-colour" aria-label="Background colour">
+              <select id="home-background-type" aria-label="Background">
+                <option value="theme">Theme</option>
+                <option value="colour">Colour</option>
+                <option value="image">Picture</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" id="home-image-row">
+            <div><span class="label">Picture</span><span class="help">Kept on this device only, and not part of the settings export.</span></div>
+            <div class="inline">
+              <img id="home-image-preview" alt="" hidden>
+              <button type="button" class="secondary" id="home-image-choose">Choose picture…</button>
+              <button type="button" class="secondary" id="home-image-remove">Remove</button>
+              <input type="file" id="home-image-file" accept="image/*" hidden>
+            </div>
+          </div>
+          <p class="form-error" id="home-image-error" role="alert" hidden></p>
+          <div class="row">
+            <div><span class="label">Shortcut columns</span></div>
+            <select name="shortcutColumns">
+              <option value="auto">Fit the panel</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div class="row">
+            <div><span class="label">Shortcut icons</span></div>
+            <select name="shortcutSize">
+              <option value="small">Small</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+          <label class="row check"><span class="label">Show shortcut names</span><input type="checkbox" name="shortcutLabels"></label>
         </section>
 
         <section id="speed-dial">
@@ -138,7 +193,8 @@
           <p class="help">
             Many sites forbid being shown inside another page. With this on, Sidespace removes the
             <code>X-Frame-Options</code> header, and a <code>Content-Security-Policy</code> that contains
-            <code>frame-ancestors</code>, only for pages the panel loads and same-site navigations inside them.
+            <code>frame-ancestors</code>, and asks for panel pages as pages rather than frames (some sites, such as Google Calendar, refuse frames),
+            only for pages the panel loads and same-site navigations inside them.
             Pages in normal tabs are never changed. For those panel pages the site's own Content-Security-Policy no longer applies.
           </p>
         </section>

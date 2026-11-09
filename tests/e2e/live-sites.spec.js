@@ -8,6 +8,9 @@ const SITES = [
   'https://chatgpt.com/',
   'https://claude.ai/',
   'https://gemini.google.com/',
+  // Google refuses requests marked as frames (403); not signed in, this
+  // ends on Google's sign-in page, which must load too.
+  'https://calendar.google.com/calendar/u/0/r',
   'https://www.perplexity.ai/',
   'https://github.com/',
   'https://en.wikipedia.org/',

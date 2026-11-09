@@ -7,6 +7,10 @@
 // A page shown in the panel that embeds a different site therefore never gets
 // that site's clickjacking protection removed. Frames inside normal web pages
 // are never touched.
+//
+// Within the same scope, requests also say they load a page
+// (Sec-Fetch-Dest: document) rather than a frame: some sites (Google Calendar)
+// refuse any request marked as a frame, whatever its headers.
 
 export const RULE_IDS = Object.freeze({
   panelLoadXfo: 1,
@@ -14,6 +18,8 @@ export const RULE_IDS = Object.freeze({
   sameSiteXfo: 3,
   sameSiteCsp: 4,
   mobileUserAgent: 5,
+  panelLoadFetchDest: 6,
+  sameSiteFetchDest: 7,
 });
 
 const NO_TAB = -1;
@@ -27,6 +33,10 @@ const CSP_WITH_FRAME_ANCESTORS = [{ header: 'content-security-policy', values: [
 const REMOVE_CSP = {
   type: 'modifyHeaders',
   responseHeaders: [{ header: 'content-security-policy', operation: 'remove' }],
+};
+const LOAD_AS_PAGE = {
+  type: 'modifyHeaders',
+  requestHeaders: [{ header: 'sec-fetch-dest', operation: 'set', value: 'document' }],
 };
 
 export function mobileUserAgent(chromeMajor) {
@@ -44,6 +54,8 @@ export function buildSessionRules(settings, chromeMajor, extensionId) {
       { id: RULE_IDS.panelLoadCsp, priority: 1, condition: { ...panelLoads, responseHeaders: CSP_WITH_FRAME_ANCESTORS }, action: REMOVE_CSP },
       { id: RULE_IDS.sameSiteXfo, priority: 1, condition: sameSite, action: REMOVE_XFO },
       { id: RULE_IDS.sameSiteCsp, priority: 1, condition: { ...sameSite, responseHeaders: CSP_WITH_FRAME_ANCESTORS }, action: REMOVE_CSP },
+      { id: RULE_IDS.panelLoadFetchDest, priority: 1, condition: panelLoads, action: LOAD_AS_PAGE },
+      { id: RULE_IDS.sameSiteFetchDest, priority: 1, condition: sameSite, action: LOAD_AS_PAGE },
     );
   }
   const mobileAll = settings.mobileMode === 'all';

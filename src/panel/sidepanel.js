@@ -1,5 +1,6 @@
 import {
-  isHttpUrl, loadSettings, normalizeHostname, onSettingsChanged, searchTemplate, updateSettings,
+  isHttpUrl, loadHomeImage, loadSettings, normalizeHostname, onHomeImageChanged, onSettingsChanged, searchTemplate,
+  updateSettings,
 } from '../shared/settings.js';
 import {
   displayHost, isBrowserOnlyUrl, resolveInput, sameOriginUrl, shortUrl, trustedFrameUrl,
@@ -8,7 +9,7 @@ import {
   addLink, moveLink, RAIL, removeLink, SPEED_DIAL, updateLink,
 } from '../shared/links.js';
 import { onInboxChanged, takeForWindow } from '../shared/inbox.js';
-import { applyAppearance } from '../shared/theme.js';
+import { applyAppearance, textColourOn } from '../shared/theme.js';
 import * as model from './session.js';
 import { faviconFor } from '../shared/favicon.js';
 import { reconcile, setIcon } from '../shared/reconcile.js';
@@ -45,7 +46,6 @@ const ui = {
   tabs: $('tabs'),
   viewport: $('viewport'),
   speedDial: $('speed-dial'),
-  clock: $('dashboard-clock'),
   clockTime: $('clock-time'),
   clockDate: $('clock-date'),
   dashboardSearch: $('dashboard-search'),
@@ -65,6 +65,8 @@ const ui = {
 };
 
 let settings;
+// The home page picture (a data: URL), or '' when there is none.
+let homeImage = '';
 let session = model.createSession();
 let view = 'web';
 let windowId;
@@ -135,9 +137,9 @@ function homeUrl() {
 }
 
 function closeTab(id) {
+  const next = model.closeTab(session, id);
+  if (next === session) return;
   dropFrame(id);
-  let next = model.closeTab(session, id);
-  if (next.tabs.length === 0) next = model.addTab(next, { url: homeUrl() }).session;
   setSession(next);
 }
 
@@ -383,6 +385,7 @@ function renderRail() {
     button.setAttribute('aria-label', tabLabel(tab));
     button.setAttribute('aria-pressed', String(view === 'web' && tab.id === session.activeId));
     close.setAttribute('aria-label', `Close ${tabLabel(tab)}`);
+    close.hidden = !model.canCloseTab(session);
     setIcon(button, tab.url, tab.icon, faviconFor);
   });
   for (const button of ui.rail.querySelectorAll('[data-view]')) {
@@ -411,6 +414,7 @@ function renderDrawer() {
     li.querySelector('.title').textContent = tabLabel(tab);
     li.querySelector('.tag').hidden = !appForTab(tab);
     li.querySelector('.close').setAttribute('aria-label', `Close ${tabLabel(tab)}`);
+    li.querySelector('.close').hidden = !model.canCloseTab(session);
     setIcon(li, tab.url, tab.icon, faviconFor);
   });
   ui.tabCount.textContent = String(session.tabs.length);
@@ -432,17 +436,47 @@ function renderFrames(active) {
   }
 }
 
+// 'auto' leaves the 12 or 24-hour choice to Chrome's language.
+const CLOCK_FORMATS = {
+  auto: { hour: '2-digit' },
+  12: { hour: 'numeric', hourCycle: 'h12' },
+  24: { hour: '2-digit', hourCycle: 'h23' },
+};
+
 function renderClock() {
   const now = new Date();
-  ui.clockTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  ui.clockTime.textContent = now.toLocaleTimeString([], { ...CLOCK_FORMATS[settings.clockFormat], minute: '2-digit' });
   ui.clockDate.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+// Order, visibility, background and shortcut grid of the home page.
+function renderHomeLayout() {
+  const parts = new Map([...ui.speedDial.querySelectorAll(':scope > [data-section]')].map((part) => [part.dataset.section, part]));
+  const order = settings.homeSections.map((section) => section.id);
+  // Moving a node drops its focus, so the parts move only when the order changed.
+  if (order.join() !== [...parts.keys()].join()) for (const id of order) ui.speedDial.append(parts.get(id));
+  for (const { id, show } of settings.homeSections) parts.get(id).hidden = !show;
+  ui.speedDial.dataset.columns = settings.shortcutColumns;
+  ui.speedDial.dataset.size = settings.shortcutSize;
+  ui.speedDial.classList.toggle('no-labels', !settings.shortcutLabels);
+  const { type, colour } = settings.homeBackground;
+  const backdrop = type === 'colour' || (type === 'image' && homeImage) ? type : '';
+  if (backdrop) ui.speedDial.dataset.backdrop = backdrop;
+  else delete ui.speedDial.dataset.backdrop;
+  ui.speedDial.style.backgroundColor = backdrop === 'colour' ? colour : '';
+  ui.speedDial.style.backgroundImage = backdrop === 'image' ? `url("${homeImage}")` : '';
+  ui.speedDial.style.setProperty('--home-ink', backdrop === 'colour' ? textColourOn(colour) : '#ffffff');
+}
+
+function sectionShown(id) {
+  return settings.homeSections.some((section) => section.id === id && section.show);
 }
 
 function renderSpeedDial(active) {
   ui.speedDial.hidden = view !== 'web' || Boolean(active?.url);
   if (ui.speedDial.hidden) return;
-  ui.clock.hidden = !settings.showClock;
-  if (settings.showClock) renderClock();
+  renderHomeLayout();
+  if (sectionShown('clock') || sectionShown('date')) renderClock();
   reconcile(ui.tiles, settings.shortcuts, (shortcut) => shortcut.url, () => {
     const li = document.createElement('li');
     li.className = 'tile';
@@ -636,7 +670,7 @@ function tabMenu(target, tab) {
       togglePin();
     }, { disabled: !tab.url }),
     menuButton('Open in browser tab', () => chrome.tabs.create({ url: tab.url, windowId }), { disabled: !tab.url }),
-    menuButton('Close tab', () => closeTab(tab.id), { danger: true }),
+    menuButton('Close tab', () => closeTab(tab.id), { danger: true, disabled: !model.canCloseTab(session) }),
   ]);
 }
 
@@ -950,7 +984,7 @@ function bindEvents() {
     if (document.visibilityState === 'hidden') flush();
   });
   setInterval(() => {
-    if (!ui.speedDial.hidden && settings.showClock) renderClock();
+    if (!ui.speedDial.hidden && (sectionShown('clock') || sectionShown('date'))) renderClock();
   }, 10_000);
 }
 
@@ -967,6 +1001,7 @@ function drainInbox() {
 async function init() {
   windowId = (await chrome.windows.getCurrent()).id;
   settings = await loadSettings();
+  homeImage = await loadHomeImage();
   applyAppearance(settings);
   bookmarks = initBookmarks({
     view: ui.bookmarksView,
@@ -1018,6 +1053,10 @@ async function init() {
     settings = next;
     applyAppearance(next);
     for (const tabId of frames.keys()) postToFrame(tabId, frameConfig());
+    render();
+  });
+  onHomeImageChanged((next) => {
+    homeImage = next;
     render();
   });
   onInboxChanged(drainInbox);

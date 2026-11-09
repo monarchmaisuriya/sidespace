@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  activateTab, addTab, canGo, closeTab, createSession, cycleTab, findAppTab, goHistory, MAX_HISTORY, MAX_TABS,
+  activateTab, addTab, canCloseTab, canGo, closeTab, createSession, cycleTab, findAppTab, goHistory, MAX_HISTORY, MAX_TABS,
   moveTab, nextZoom, pushUrl, replaceUrl, restoreSession, tieTab, untieApp, updateTab,
 } from '../../src/panel/session.js';
 
@@ -31,9 +31,15 @@ test('closing the active tab activates the right neighbour, then the left', () =
   assert.equal(s.activeId, 't3');
   s = closeTab(s, 't3');
   assert.equal(s.activeId, 't1');
-  s = closeTab(s, 't1');
-  assert.equal(s.activeId, null);
-  assert.equal(s.tabs.length, 0);
+});
+
+test('the last tab cannot be closed, by any caller', () => {
+  const two = withTabs(2);
+  assert.equal(canCloseTab(two), true);
+  const one = closeTab(two, 't2');
+  assert.equal(canCloseTab(one), false);
+  assert.equal(closeTab(one, 't1'), one);
+  assert.equal(canCloseTab(createSession()), false);
 });
 
 test('tab limit raises instead of dropping silently', () => {

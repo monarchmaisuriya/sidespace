@@ -6,7 +6,8 @@
 export const SETTINGS_KEY = 'settings';
 // Stored with the settings; bumped when stored values need a one-time
 // migration. 2: the old fixed accent default (#6d5dfc) became "theme accent".
-export const SETTINGS_VERSION = 2;
+// 3: showClock became the clock and date entries of homeSections.
+export const SETTINGS_VERSION = 3;
 export const MAX_LINK_LENGTH = 2048;
 export const MAX_SHORTCUTS = 24;
 export const MAX_APPS = 12;
@@ -40,8 +41,24 @@ export const DEFAULT_SETTINGS = Object.freeze({
     { title: 'Claude', url: 'https://claude.ai/' },
     { title: 'Perplexity', url: 'https://www.perplexity.ai/' },
   ],
-  showClock: true,
+  clockFormat: 'auto',
+  // The home page's parts, in display order.
+  homeSections: [
+    { id: 'clock', show: true },
+    { id: 'date', show: true },
+    { id: 'search', show: true },
+    { id: 'shortcuts', show: true },
+  ],
+  // 'image' shows the picture stored under HOME_IMAGE_KEY, when there is one.
+  homeBackground: { type: 'theme', colour: '#1c1c1c' },
+  shortcutColumns: 'auto',
+  shortcutSize: 'small',
+  shortcutLabels: true,
 });
+
+// The home page background picture, stored apart from settings so they stay
+// small and the settings export does not carry it.
+export const HOME_IMAGE_KEY = 'homeImage';
 
 const CHOICES = {
   theme: ['system', 'light', 'dark'],
@@ -51,6 +68,9 @@ const CHOICES = {
   mobileMode: ['off', 'sites', 'all'],
   newWindowLinks: ['panel', 'browser'],
   railPosition: ['left', 'right', 'hidden'],
+  clockFormat: ['auto', '12', '24'],
+  shortcutColumns: ['auto', '4', '5', '6'],
+  shortcutSize: ['small', 'large'],
 };
 
 export function isHttpUrl(value) {
@@ -91,6 +111,33 @@ function normalizeAccent(value, version) {
   if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) return '';
   const accent = value.toLowerCase();
   return accent === FORMER_DEFAULT_ACCENT && version < 2 ? '' : accent;
+}
+
+// Known parts once each in the stored order, then any missing ones, shown.
+// Before version 3, showClock: false hid the clock and its date.
+function normalizeHomeSections(list, version, showClock) {
+  const known = DEFAULT_SETTINGS.homeSections.map((section) => section.id);
+  const hiddenBefore = version < 3 && showClock === false ? ['clock', 'date'] : [];
+  const result = [];
+  for (const section of Array.isArray(list) ? list : []) {
+    if (!section || !known.includes(section.id) || result.some((kept) => kept.id === section.id)) continue;
+    result.push({ id: section.id, show: typeof section.show === 'boolean' ? section.show : true });
+  }
+  for (const id of known) {
+    if (!result.some((kept) => kept.id === id)) result.push({ id, show: !hiddenBefore.includes(id) });
+  }
+  return result;
+}
+
+const HOME_BACKGROUNDS = ['theme', 'colour', 'image'];
+
+function normalizeHomeBackground(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  const colour = typeof input.colour === 'string' && /^#[0-9a-f]{6}$/i.test(input.colour)
+    ? input.colour.toLowerCase()
+    : DEFAULT_SETTINGS.homeBackground.colour;
+  const type = HOME_BACKGROUNDS.includes(input.type) ? input.type : DEFAULT_SETTINGS.homeBackground.type;
+  return { type, colour };
 }
 
 // The one rule for addresses in rail apps and speed dial shortcuts.
@@ -185,7 +232,12 @@ export function normalizeSettings(raw) {
     // A missing list means "never set", so the presets apply; an empty list
     // means the user removed every app.
     apps: normalizeApps(Array.isArray(input.apps) ? input.apps : DEFAULT_SETTINGS.apps),
-    showClock: pickBoolean('showClock', input.showClock),
+    clockFormat: pickChoice('clockFormat', input.clockFormat),
+    homeSections: normalizeHomeSections(input.homeSections, version, input.showClock),
+    homeBackground: normalizeHomeBackground(input.homeBackground),
+    shortcutColumns: pickChoice('shortcutColumns', input.shortcutColumns),
+    shortcutSize: pickChoice('shortcutSize', input.shortcutSize),
+    shortcutLabels: pickBoolean('shortcutLabels', input.shortcutLabels),
   };
 }
 
@@ -223,6 +275,22 @@ export async function updateSettings(change) {
   const current = await loadSettings();
   const patch = typeof change === 'function' ? change(current) : change;
   return saveSettings({ ...current, ...patch });
+}
+
+// The home page picture: a data: URL the settings page made on a canvas.
+// Anything else in that key is ignored.
+export function validHomeImage(value) {
+  return typeof value === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : '';
+}
+
+export async function loadHomeImage() {
+  return validHomeImage((await chrome.storage.local.get(HOME_IMAGE_KEY))[HOME_IMAGE_KEY]);
+}
+
+export function onHomeImageChanged(callback) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[HOME_IMAGE_KEY]) callback(validHomeImage(changes[HOME_IMAGE_KEY].newValue));
+  });
 }
 
 export function onSettingsChanged(callback) {

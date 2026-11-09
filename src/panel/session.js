@@ -79,9 +79,15 @@ export function addTab(session, { url = '', activate = true, app = '' } = {}) {
   };
 }
 
+// The panel always keeps one tab: closing the last would only replace it with
+// a blank one, so it is not offered and not done.
+export function canCloseTab(session) {
+  return session.tabs.length > 1;
+}
+
 export function closeTab(session, id) {
   const index = session.tabs.findIndex((tab) => tab.id === id);
-  if (index === -1) return session;
+  if (index === -1 || !canCloseTab(session)) return session;
   const tabs = session.tabs.filter((tab) => tab.id !== id);
   let { activeId } = session;
   if (activeId === id) {

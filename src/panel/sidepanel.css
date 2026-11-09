@@ -91,22 +91,28 @@ svg circle.ring { fill: none; stroke: currentColor; }
 .tabs-button:hover { background: var(--surface-hover); }
 
 /* Rail */
+/* The rail is one grid: buttons of --rail-button with a --rail-gutter on each
+   side, where the active bar sits. The top padding puts the first button's
+   centre on the toolbar row's centre (row = control + 2 * gap, button =
+   control + 6px). */
 .rail {
+  --rail-button: calc(var(--control) + 6px);
+  --rail-gutter: 7px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: none;
-  width: calc(var(--control) + 18px);
-  padding: var(--gap) 0;
+  width: calc(var(--rail-button) + 2 * var(--rail-gutter) + 2px);
+  padding: calc(var(--gap) - 3px) 0 var(--gap);
   background: var(--surface);
   border-inline: 1px solid var(--border);
   overflow-y: auto;
   scrollbar-width: none;
 }
-.rail-list { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rail-list { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .rail-list:empty { display: none; }
-.rail-divider { width: 22px; margin: 6px 0; border: 0; border-top: 1px solid var(--border); }
+.rail-divider { width: 22px; margin: 0; border: 0; border-top: 1px solid var(--border); }
 .shell:not(.tabs-in-rail) #rail-divider, .shell:not(.tabs-in-rail) #rail-tabs { display: none; }
 .rail-spacer { flex: 1; min-height: 8px; }
 .rail-item { position: relative; }
@@ -114,8 +120,8 @@ svg circle.ring { fill: none; stroke: currentColor; }
   position: relative;
   display: grid;
   place-items: center;
-  width: calc(var(--control) + 6px);
-  height: calc(var(--control) + 6px);
+  width: var(--rail-button);
+  height: var(--rail-button);
   padding: 0;
   border: 0;
   border-radius: 10px;
@@ -135,8 +141,8 @@ svg circle.ring { fill: none; stroke: currentColor; }
   border-radius: 3px;
   background: var(--accent);
 }
-.shell.rail-right .rail-button[aria-pressed="true"]::before { right: -6px; }
-.shell.rail-left .rail-button[aria-pressed="true"]::before { left: -6px; }
+.shell.rail-right .rail-button[aria-pressed="true"]::before { right: calc(2px - var(--rail-gutter)); }
+.shell.rail-left .rail-button[aria-pressed="true"]::before { left: calc(2px - var(--rail-gutter)); }
 .rail-button.is-open::after {
   content: "";
   position: absolute;
@@ -151,20 +157,20 @@ svg circle.ring { fill: none; stroke: currentColor; }
 .rail-button .favicon img { width: 20px; height: 20px; }
 .rail-close {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: 2px;
+  right: 2px;
   display: none;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--raised);
   color: var(--text-muted);
 }
-.rail-close svg { width: 10px; height: 10px; stroke-width: 2.4; }
-.rail-item:hover .rail-close, .rail-item:focus-within .rail-close { display: grid; }
+.rail-close svg { width: 8px; height: 8px; stroke-width: 2.6; }
+.rail-item:hover .rail-close:not([hidden]), .rail-item:focus-within .rail-close:not([hidden]) { display: grid; }
 .rail-close:hover { color: var(--text); }
 .rail .dragging { opacity: 0.35; }
 .rail .drop-before { box-shadow: 0 -2px 0 var(--accent); }
@@ -185,6 +191,8 @@ svg circle.ring { fill: none; stroke: currentColor; }
 }
 .favicon.has-image { background: transparent; }
 .favicon img { width: 16px; height: 16px; object-fit: contain; }
+.favicon[data-icon="home"] { background: transparent; }
+.favicon[data-icon="home"] svg { width: 100%; height: 100%; }
 
 /* Tab drawer */
 .drawer {
@@ -221,6 +229,7 @@ svg circle.ring { fill: none; stroke: currentColor; }
 .tab .tag { color: var(--text-muted); font-size: var(--text-xs); }
 /* Faded, not hidden: hidden buttons cannot take keyboard focus. */
 .tab .close { opacity: 0; }
+.tab .close[hidden] { display: none; }
 .tab:hover .close, .tab[aria-selected="true"] .close, .tab:focus-within .close { opacity: 1; }
 .tab.dragging { opacity: 0.35; }
 .drawer-new {
@@ -264,12 +273,11 @@ main { position: relative; flex: 1; min-height: 0; }
 .view[hidden] { display: none; }
 .view-title { margin: 0 0 8px; font-size: var(--text-lg); }
 
-.speed-dial { padding: 32px 16px; }
-.dashboard-clock { margin-bottom: 20px; text-align: center; }
-.dashboard-clock[hidden] { display: none; }
-.dashboard-clock .time { font-size: var(--text-display); font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.dashboard-clock .date { color: var(--text-muted); }
-.dashboard-search { position: relative; max-width: 440px; margin: 0 auto 24px; }
+.speed-dial { display: flex; flex-direction: column; gap: 20px; padding: 32px 16px; background-position: center; background-size: cover; }
+.home-part[hidden] { display: none; }
+.home-time { font-size: var(--text-display); font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; text-align: center; }
+.home-date { margin-top: -18px; color: var(--text-muted); text-align: center; }
+.dashboard-search { position: relative; width: 100%; max-width: 440px; margin: 0 auto; }
 .dashboard-search svg { position: absolute; top: 50%; left: 14px; width: 16px; height: 16px; color: var(--text-muted); transform: translateY(-50%); }
 .dashboard-search input {
   width: 100%;
@@ -306,11 +314,26 @@ main { position: relative; flex: 1; min-height: 0; }
 .tile .favicon img { width: 24px; height: 24px; }
 .tile .favicon.has-image { background: var(--surface); }
 .tile .label { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-sm); }
+.speed-dial[data-columns="4"] .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.speed-dial[data-columns="5"] .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.speed-dial[data-columns="6"] .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.speed-dial[data-size="large"] .tile .favicon { width: 56px; height: 56px; }
+.speed-dial[data-size="large"] .tile .favicon img { width: 32px; height: 32px; }
+.speed-dial.no-labels .tile .label { display: none; }
+/* On a chosen colour or picture, text takes --home-ink, set from the backdrop,
+   and the search box and tiles get a translucent surface so they stay
+   readable. */
+.speed-dial[data-backdrop="colour"], .speed-dial[data-backdrop="image"] { color: var(--home-ink); }
+.speed-dial[data-backdrop] .home-date, .speed-dial[data-backdrop] .empty { color: inherit; opacity: 0.75; }
+.speed-dial[data-backdrop="image"] .home-time, .speed-dial[data-backdrop="image"] .home-date { text-shadow: 0 1px 8px rgb(0 0 0 / 0.6); }
+.speed-dial[data-backdrop="image"] .tile a { color: var(--home-ink); background: rgb(0 0 0 / 0.28); backdrop-filter: blur(6px); }
+.speed-dial[data-backdrop="image"] .dashboard-search input { background: rgb(0 0 0 / 0.35); color: #fff; backdrop-filter: blur(6px); }
 .tile .remove { position: absolute; top: 2px; right: 2px; visibility: hidden; }
 .tile:hover .remove, .tile:focus-within .remove { visibility: visible; }
 .empty { color: var(--text-muted); text-align: center; font-size: var(--text-sm); }
 .empty[hidden] { display: none; }
 .add-shortcut { display: flex; gap: 6px; max-width: 360px; margin: 20px auto 0; }
+.speed-dial[data-backdrop] .tile a:hover { filter: brightness(1.15); }
 .add-shortcut input, .view-header input, .dialog input {
   flex: 1;
   min-width: 0;

@@ -9,7 +9,7 @@ const byId = (rules, id) => rules.find((rule) => rule.id === id);
 
 test('every rule is limited to side-panel frames (no tab, sub_frame)', () => {
   const rules = build({ unlockFraming: true, mobileMode: 'all' });
-  assert.equal(rules.length, 5);
+  assert.equal(rules.length, 7);
   for (const rule of rules) {
     assert.deepEqual(rule.condition.tabIds, [-1]);
     assert.deepEqual(rule.condition.resourceTypes, ['sub_frame']);
@@ -30,6 +30,15 @@ test('framing headers are removed only for panel loads or same-site navigations'
   for (const rule of rules.filter((r) => r.action.responseHeaders)) {
     assert.ok(rule.condition.initiatorDomains || rule.condition.domainType, `rule ${rule.id} is unscoped`);
   }
+});
+
+test('panel frames are reported as pages (Sec-Fetch-Dest: document) with the same scope as header removal', () => {
+  const rules = build({});
+  const setsDocument = { type: 'modifyHeaders', requestHeaders: [{ header: 'sec-fetch-dest', operation: 'set', value: 'document' }] };
+  assert.deepEqual(byId(rules, RULE_IDS.panelLoadFetchDest).action, setsDocument);
+  assert.deepEqual(byId(rules, RULE_IDS.panelLoadFetchDest).condition.initiatorDomains, [EXT]);
+  assert.deepEqual(byId(rules, RULE_IDS.sameSiteFetchDest).action, setsDocument);
+  assert.equal(byId(rules, RULE_IDS.sameSiteFetchDest).condition.domainType, 'firstParty');
 });
 
 test('the extension id is required', () => {

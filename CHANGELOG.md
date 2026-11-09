@@ -2,6 +2,34 @@
 
 All notable changes to Sidespace. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-10
+
+### Fixed
+
+- Google Calendar showed Google's 403 page in the panel. Google refuses any request marked as loading a frame (`Sec-Fetch-Dest: iframe`), whatever its other headers. With **Show them anyway** on, panel pages are now requested as pages, with the same scope as the header removal (loads the panel starts, and same-site navigations inside them). Google's sign-in page now loads in the panel too.
+- The rail's close button hung outside the tab button and its active bar sat on the rail's border; the first rail button sat 3 px below the toolbar. The rail now follows one spacing grid in both densities and on both sides.
+- The last tab showed a close button (closing it only replaced it with a blank tab). The last tab now cannot be closed from any button, menu or shortcut.
+- The settings button showed a sun; it is now a gear.
+
+### Known limits
+
+- Gmail still cannot be shown in the panel: its service worker answers page loads with `X-Frame-Options`, which extensions cannot change, and Google's servers refuse it when loaded past the worker. Use **Open in a browser tab** or Chrome's split view. Details: `docs/2026-11-10-0130_gmail-service-worker-debugger_research.md`.
+
+### Added
+
+- New tab page options (settings page, **New tab page**): show, hide and reorder the clock, date, search box and shortcuts; a background of the theme, a colour, or a picture (shrunk and kept on this device, not in the settings export); shortcut columns, icon size, and names on or off.
+- Clock format: Auto (Chrome's language), 12-hour or 24-hour.
+- A blank tab shows a home icon in the rail instead of a "+".
+
+### Changed
+
+- The new logo is used for the toolbar, `chrome://extensions`, the side panel header and the settings page.
+- Settings version 3: the "Show clock and date" checkbox became the clock and date entries of the parts list; a hidden clock stays hidden.
+
+### Tested on
+
+- Chrome for Testing 155.0.8059.12 and 158.0.8127.18: 53 unit tests, 93 end-to-end tests (three runs in a row on 158), 8 live sites including Google Calendar. Calendar and the Google sign-in page checked by M in Chrome 157.
+
 ## [0.3.0] - 2026-11-09
 
 ### Changed

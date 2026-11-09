@@ -136,6 +136,18 @@ test.describe('security', () => {
     await expect(activeFrame(panel).locator('h1')).toHaveText('xfo page');
     await expect(panel.locator('#load-hint')).toBeHidden();
   });
+
+  test('panel frames are requested as pages, also after a same-site link, and as frames with unlock off', async () => {
+    await go(panel, `${env.base}/fetch-dest`);
+    await expect(activeFrame(panel).locator('#dest')).toHaveText('document');
+    await activeFrame(panel).locator('#again').press('Enter');
+    await expect(panel.locator('#address')).toHaveValue(/fetch-dest\?again/);
+    await expect(activeFrame(panel).locator('#dest')).toHaveText('document');
+    await setSettings(panel, { unlockFraming: false });
+    await panel.click('#reload');
+    await expect(activeFrame(panel).locator('#dest')).toHaveText('iframe');
+    await setSettings(panel, { unlockFraming: true });
+  });
 });
 
 test.describe('navigation', () => {
@@ -336,10 +348,23 @@ test.describe('persistence', () => {
     await setSettings(panel, { restoreSession: true });
   });
 
-  test('closing the last tab leaves one fresh tab', async () => {
+  test('the last tab cannot be closed: no close button, menu item disabled, Alt+W keeps it', async () => {
     const count = await panel.locator('.tab').count();
-    for (let i = 0; i < count; i += 1) await panel.keyboard.press('Alt+KeyW');
+    for (let i = 0; i < count - 1; i += 1) await panel.keyboard.press('Alt+KeyW');
     await expect(panel.locator('.tab')).toHaveCount(1);
-    await expect(panel.locator('#speed-dial')).toBeVisible();
+    await go(panel, `${env.base}/second?last`);
+    await panel.keyboard.press('Alt+KeyW');
+    await expect(panel.locator('.tab')).toHaveCount(1);
+    await expect(panel.locator('#address')).toHaveValue(/second\?last/);
+    await expect(activeFrame(panel).locator('h1')).toHaveText('second page');
+    await expect(panel.locator('#tabs .tab .close')).toBeHidden();
+    await panel.locator('.rail-tab').first().hover();
+    await expect(panel.locator('.rail-close')).toBeHidden();
+    await panel.locator('.rail-tab').first().click({ button: 'right' });
+    await expect(panel.getByRole('menuitem', { name: 'Close tab' })).toBeDisabled();
+    await panel.keyboard.press('Escape');
+    await panel.click('#new-tab');
+    await panel.locator('.rail-tab').first().hover();
+    await expect(panel.locator('.rail-close').first()).toBeVisible();
   });
 });

@@ -55,7 +55,7 @@ test.describe('form controls', () => {
     await options.uncheck('input[name="unlockFraming"]');
     await expect.poll(ruleIds).toEqual([]);
     await options.check('input[name="unlockFraming"]');
-    await expect.poll(ruleIds).toEqual([1, 2, 3, 4]);
+    await expect.poll(ruleIds).toEqual([1, 2, 3, 4, 6, 7]);
   });
 
   test('mobile sites typed in the box become the mobile rule domains', async () => {

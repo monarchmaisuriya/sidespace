@@ -1,5 +1,6 @@
 import {
-  DEFAULT_SETTINGS, loadSettings, looksLikeSettings, normalizeHostname, onSettingsChanged, saveSettings, updateSettings,
+  DEFAULT_SETTINGS, HOME_IMAGE_KEY, loadHomeImage, loadSettings, looksLikeSettings, normalizeHostname, onHomeImageChanged,
+  onSettingsChanged, saveSettings, updateSettings, validHomeImage,
 } from '../shared/settings.js';
 import {
   addLink, moveLink, RAIL, removeLink, SPEED_DIAL, updateLink,
@@ -12,6 +13,15 @@ const form = document.getElementById('settings');
 const status = document.getElementById('status');
 const importFile = document.getElementById('import-file');
 const accentCustom = document.getElementById('accent-custom');
+const homeSections = document.getElementById('home-sections');
+const backgroundType = document.getElementById('home-background-type');
+const backgroundColour = document.getElementById('home-background-colour');
+const imageFile = document.getElementById('home-image-file');
+const imagePreview = document.getElementById('home-image-preview');
+const imageError = document.getElementById('home-image-error');
+const SECTION_NAMES = { clock: 'Clock', date: 'Date', search: 'Search box', shortcuts: 'Shortcuts' };
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_SIDE = 2560;
 const ICONS = {
   up: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
@@ -24,6 +34,8 @@ const EDITORS = {
 };
 
 let settings;
+// The stored new tab page picture (a data: URL), or ''.
+let homeImage = '';
 // True from picking "Custom" until a valid template is saved or another
 // engine is picked. Until then the stored engine is still the old one, so
 // refilling the form from storage would undo the user's choice mid-edit.
@@ -55,6 +67,8 @@ function fill(values) {
   const custom = choosingCustom || values.searchEngine === 'custom';
   document.getElementById('custom-search-row').hidden = !custom;
   for (const key of Object.keys(EDITORS)) renderEditor(key);
+  renderHomeSections();
+  renderBackground();
 }
 
 // ---------- rail apps and speed dial editors ----------
@@ -175,6 +189,133 @@ for (const key of Object.keys(EDITORS)) {
   });
 }
 
+// ---------- new tab page ----------
+
+function renderHomeSections() {
+  const sections = settings.homeSections;
+  reconcile(homeSections, sections, (section) => section.id, (section) => {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    const show = document.createElement('input');
+    show.type = 'checkbox';
+    label.append(show, SECTION_NAMES[section.id]);
+    li.append(label, iconButton('up', `Move ${SECTION_NAMES[section.id]} up`), iconButton('down', `Move ${SECTION_NAMES[section.id]} down`));
+    return li;
+  }, (li, section) => {
+    const index = sections.indexOf(section);
+    li.dataset.id = section.id;
+    li.querySelector('input').checked = section.show;
+    li.querySelector('[data-action="up"]').disabled = index === 0;
+    li.querySelector('[data-action="down"]').disabled = index === sections.length - 1;
+  });
+}
+
+// Applies one change to the parts list as stored right now.
+async function editSections(change) {
+  fill(await updateSettings((current) => ({ homeSections: change(current.homeSections.map((section) => ({ ...section }))) })));
+  showStatus('Saved');
+}
+
+homeSections.addEventListener('change', (event) => {
+  event.stopPropagation();
+  const { id } = event.target.closest('li').dataset;
+  const show = event.target.checked;
+  editSections((sections) => sections.map((section) => (section.id === id ? { ...section, show } : section)));
+});
+
+homeSections.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const { id } = button.closest('li').dataset;
+  const step = button.dataset.action === 'up' ? -1 : 1;
+  editSections((sections) => {
+    const from = sections.findIndex((section) => section.id === id);
+    const to = from + step;
+    if (from === -1 || to < 0 || to >= sections.length) return sections;
+    [sections[from], sections[to]] = [sections[to], sections[from]];
+    return sections;
+  }).then(() => {
+    // At the top or bottom the button just used is disabled and loses focus.
+    if (button.disabled) button.closest('li').querySelector(`[data-action="${step < 0 ? 'down' : 'up'}"]`).focus();
+  });
+});
+
+function renderBackground() {
+  const { type, colour } = settings.homeBackground;
+  backgroundType.value = type;
+  if (document.activeElement !== backgroundColour) backgroundColour.value = colour;
+  backgroundColour.hidden = type !== 'colour';
+  document.getElementById('home-image-row').hidden = type !== 'image';
+  imagePreview.hidden = !homeImage;
+  if (homeImage) imagePreview.src = homeImage;
+  document.getElementById('home-image-remove').disabled = !homeImage;
+}
+
+function showImageError(message) {
+  imageError.textContent = message;
+  imageError.hidden = !message;
+}
+
+backgroundType.addEventListener('change', (event) => {
+  event.stopPropagation();
+  save({ homeBackground: { ...settings.homeBackground, type: backgroundType.value } });
+  if (backgroundType.value === 'image' && !homeImage) imageFile.click();
+});
+backgroundColour.addEventListener('change', (event) => {
+  event.stopPropagation();
+  save({ homeBackground: { ...settings.homeBackground, colour: backgroundColour.value } });
+});
+
+// Shrinks the picture to at most MAX_IMAGE_SIDE pixels on its long side and
+// returns it as a WebP data: URL, so one picture stays well inside the
+// 10 MB storage.local quota.
+async function homeImageFrom(file) {
+  if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not a picture.`);
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(`${file.name} is ${(file.size / 1048576).toFixed(1)} MB; pictures can be at most 8 MB.`);
+  }
+  const bitmap = await createImageBitmap(file).catch(() => {
+    throw new Error(`${file.name} could not be read as a picture.`);
+  });
+  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
+  const url = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  if (!validHomeImage(url)) throw new Error(`${file.name} could not be converted to a WebP picture.`);
+  return url;
+}
+
+document.getElementById('home-image-choose').addEventListener('click', () => imageFile.click());
+imageFile.addEventListener('change', async () => {
+  const [file] = imageFile.files;
+  imageFile.value = '';
+  if (!file) return;
+  try {
+    await chrome.storage.local.set({ [HOME_IMAGE_KEY]: await homeImageFrom(file) });
+  } catch (failure) {
+    showImageError(failure.message);
+    return;
+  }
+  showImageError('');
+  await save({ homeBackground: { ...settings.homeBackground, type: 'image' } });
+});
+document.getElementById('home-image-remove').addEventListener('click', async () => {
+  await chrome.storage.local.remove(HOME_IMAGE_KEY);
+  await save({ homeBackground: { ...settings.homeBackground, type: 'theme' } });
+});
+
+onHomeImageChanged((next) => {
+  homeImage = next;
+  renderBackground();
+});
+
 document.getElementById('apps-reset').addEventListener('click', () => {
   save({ apps: DEFAULT_SETTINGS.apps.map((app) => ({ ...app })) });
 });
@@ -259,10 +400,14 @@ importFile.addEventListener('change', async () => {
 });
 
 document.getElementById('reset').addEventListener('click', async () => {
-  if (!confirm('Reset every Sidespace setting, including rail apps and speed dial shortcuts?')) return;
+  if (!confirm('Reset every Sidespace setting, including rail apps, speed dial shortcuts and the new tab picture?')) return;
+  await chrome.storage.local.remove(HOME_IMAGE_KEY);
   fill(await saveSettings(DEFAULT_SETTINGS));
   showStatus('Reset');
 });
 
 onSettingsChanged(fill);
-loadSettings().then(fill);
+Promise.all([loadSettings(), loadHomeImage()]).then(([values, image]) => {
+  homeImage = image;
+  fill(values);
+});

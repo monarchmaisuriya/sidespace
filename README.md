@@ -10,7 +10,7 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 - **App rail**: a dock on the panel edge with pinned web apps. ChatGPT, Gemini, Claude and Perplexity are pinned by default. Add any site with the **+** under the apps, right-click an app to edit, move or remove it, or drag it to reorder; the settings page has the same editor. Each app keeps its own panel tab, so switching back is instant. Rail on the left, right, or hidden.
 - **Panel tabs**: open tabs sit in the rail under the apps (or only in the tab list, if you prefer); the tab count button in the toolbar lists every tab with its full title. Drag to reorder, middle-click or hover **×** to close.
 - **Navigation**: address bar that takes a URL or a search, back, forward, reload. Each tab has its own history; the address bar follows link clicks and single-page-app navigation.
-- **Dashboard**: the new tab page shows a clock, a search box, and your speed dial shortcuts.
+- **New tab page**: a clock, the date, a search box and your speed dial shortcuts. Show, hide and reorder them; set the background to the theme, a colour or your own picture (kept on this device); choose shortcut columns, icon size and whether names show; clock in Chrome's format, 12-hour or 24-hour.
 - **Bookmarks**: browse folders and search your Chrome bookmarks inside the panel, and bookmark the panel page. Chrome asks for bookmark access the first time.
 - **Quick notes**: a notepad in the panel, saved automatically on this device.
 - **Mobile view**: ask chosen sites (or all sites) for their mobile version, which suits the narrow panel.
@@ -19,7 +19,7 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 - **New-window links** (`target=_blank`, including via `<base>`) and `window.open(url, '_blank', 'noopener')` calls made while you are using the page (a click or key press in the last few seconds) become new panel tabs, or browser tabs if you prefer.
 - **Session restore**: panel tabs and their history come back when you reopen the panel, and after restarting Chrome. Restored tabs load only when you switch to them.
 - **Look**: a dark theme in the [Vesper](https://github.com/vladzima/vesper-theme) palette and a matching light theme, one consistent font scale, real site icons where Chrome has them, and an address bar that shows `example.com/path` until you click it.
-- **Customisation**: theme (system, light, dark), accent colour (theme default or a swatch), density, rail position, where open tabs show, clock, search engine (Google, DuckDuckGo, Bing, Brave, or a custom `%s` template), home page, rail apps and speed dial (add, edit, reorder, remove), settings export and import.
+- **Customisation**: theme (system, light, dark), accent colour (theme default or a swatch), density, rail position, where open tabs show, new tab page, search engine (Google, DuckDuckGo, Bing, Brave, or a custom `%s` template), home page, rail apps and speed dial (add, edit, reorder, remove), settings export and import.
 
 ### Keyboard (inside the panel)
 
@@ -46,14 +46,14 @@ Requires Chrome 128 or newer.
 
 The panel uses your normal Chrome sign-ins: sites in the panel get the same cookies and site storage as your tabs. If you are signed in to a site in a tab, you are signed in to it in the panel.
 
-- Sign-in pages that refuse to load in a frame (Google's, for one: Google blocks sign-in inside embedded frames) can be done in a normal tab. Sign in there, then reload the panel tab.
+- Sign-in pages that refuse to load in a frame can be done in a normal tab. Sign in there, then reload the panel tab. (Google's sign-in page loads in the panel since 0.4.0; signing in there has not been tested.)
 - Sign-in popups ("Sign in with …" windows) open as real popups, so they can hand the result back to the page that opened them.
 
 ## How embedding works
 
 The side panel can only show extension pages, so Sidespace shows each website in an `<iframe>` inside its panel page.
 
-Many sites forbid being framed with `X-Frame-Options` or a `Content-Security-Policy` containing `frame-ancestors`. With **Show them anyway** on (the default), Sidespace removes those headers with `declarativeNetRequest` session rules, scoped as tightly as Chrome allows:
+Many sites forbid being framed with `X-Frame-Options` or a `Content-Security-Policy` containing `frame-ancestors`, and some (Google Calendar) refuse any request marked as loading a frame (`Sec-Fetch-Dest: iframe`). With **Show them anyway** on (the default), Sidespace removes those headers and requests panel pages as pages (`Sec-Fetch-Dest: document`), with `declarativeNetRequest` session rules scoped as tightly as Chrome allows:
 
 ```
 request for a frame
@@ -102,6 +102,7 @@ Nothing leaves your browser. There is no server and no analytics. With **Restore
 - Mobile view changes the user agent the server sees, not `navigator.userAgent` seen by page scripts.
 - `window.open()` without `noopener` opens a real popup, on purpose: sign-in popups need the link back to the page.
 - A form that posts to a different site which forbids framing (some single sign-on flows) cannot be shown in the panel; Sidespace offers "Open in a browser tab". Resubmitting the form from the panel would change its `Origin` header and pass its fields, often passwords, through the extension, so it does not.
+- Gmail does not work in the panel. Its service worker answers page loads itself with `X-Frame-Options: sameorigin`, which extension network rules cannot change; and loaded past the worker (tested with Chrome's debugger), Google's servers answer with "Temporary Error". The same holds for any site whose service worker refuses frames. Use **Open in a browser tab**, or Chrome's split view to keep it beside your page.
 - Some sites detect being framed in other ways; use **Open in browser tab** for those.
 - With panels open in several windows, the most recently changed one is what restores after a Chrome restart.
 

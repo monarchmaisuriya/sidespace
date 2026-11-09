@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_SETTINGS, MAX_SHORTCUTS, looksLikeSettings, normalizeHostname, normalizeSettings, searchTemplate,
+  DEFAULT_SETTINGS, MAX_SHORTCUTS, looksLikeSettings, validHomeImage, normalizeHostname, normalizeSettings, searchTemplate,
 } from '../../src/shared/settings.js';
 
 test('missing or non-object input gives the defaults, versioned, with app ids', () => {
@@ -9,7 +9,7 @@ test('missing or non-object input gives the defaults, versioned, with app ids', 
     const { settingsVersion, apps, ...rest } = normalizeSettings(input);
     const { apps: defaultApps, ...defaultRest } = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
     assert.deepEqual(rest, defaultRest);
-    assert.equal(settingsVersion, 2);
+    assert.equal(settingsVersion, 3);
     assert.deepEqual(apps.map(({ title, url }) => ({ title, url })), defaultApps);
     assert.ok(apps.every((app) => /^app-[a-z0-9]+$/.test(app.id)));
   }
@@ -93,4 +93,50 @@ test('accent: empty means the theme accent, the old fixed default migrates once,
   assert.equal(normalizeSettings({ accent: '#6d5dfc', settingsVersion: 2 }).accent, '#6d5dfc');
   assert.equal(normalizeSettings({ accent: '#FFC799' }).accent, '#ffc799');
   assert.equal(normalizeSettings({ accent: 'red' }).accent, '');
+});
+
+test('clock format is auto, 12 or 24', () => {
+  assert.equal(normalizeSettings({}).clockFormat, 'auto');
+  assert.equal(normalizeSettings({ clockFormat: '12' }).clockFormat, '12');
+  assert.equal(normalizeSettings({ clockFormat: 12 }).clockFormat, 'auto');
+});
+
+test('home sections: known ids once each, missing ones appended shown, order kept', () => {
+  assert.deepEqual(normalizeSettings({}).homeSections, [
+    { id: 'clock', show: true }, { id: 'date', show: true }, { id: 'search', show: true }, { id: 'shortcuts', show: true },
+  ]);
+  assert.deepEqual(normalizeSettings({ settingsVersion: 3, homeSections: [{ id: 'shortcuts', show: false }, { id: 'weather' }, { id: 'shortcuts' }, { id: 'clock', show: 'no' }] }).homeSections, [
+    { id: 'shortcuts', show: false }, { id: 'clock', show: true }, { id: 'date', show: true }, { id: 'search', show: true },
+  ]);
+});
+
+test('home sections: an old hidden clock hides the clock and date once; showClock is gone', () => {
+  const migrated = normalizeSettings({ settingsVersion: 2, showClock: false });
+  assert.deepEqual(migrated.homeSections.filter((section) => !section.show).map((section) => section.id), ['clock', 'date']);
+  assert.equal('showClock' in migrated, false);
+  const later = normalizeSettings({ settingsVersion: 3, showClock: false });
+  assert.ok(later.homeSections.every((section) => section.show));
+});
+
+test('home background: theme, a colour, or an image; bad values fall back', () => {
+  assert.deepEqual(normalizeSettings({}).homeBackground, { type: 'theme', colour: '#1c1c1c' });
+  assert.deepEqual(normalizeSettings({ homeBackground: { type: 'colour', colour: '#ABCDEF' } }).homeBackground, { type: 'colour', colour: '#abcdef' });
+  assert.deepEqual(normalizeSettings({ homeBackground: { type: 'video', colour: 'red' } }).homeBackground, { type: 'theme', colour: '#1c1c1c' });
+  assert.equal(normalizeSettings({ homeBackground: { type: 'image' } }).homeBackground.type, 'image');
+});
+
+test('shortcut grid: columns, size and labels', () => {
+  const defaults = normalizeSettings({});
+  assert.deepEqual([defaults.shortcutColumns, defaults.shortcutSize, defaults.shortcutLabels], ['auto', 'small', true]);
+  const set = normalizeSettings({ shortcutColumns: '6', shortcutSize: 'large', shortcutLabels: false });
+  assert.deepEqual([set.shortcutColumns, set.shortcutSize, set.shortcutLabels], ['6', 'large', false]);
+  assert.equal(normalizeSettings({ shortcutColumns: '9' }).shortcutColumns, 'auto');
+});
+
+test('home image: only a base64 webp, jpeg or png data URL is used', () => {
+  assert.equal(validHomeImage('data:image/webp;base64,UklGRg=='), 'data:image/webp;base64,UklGRg==');
+  assert.equal(validHomeImage('data:image/svg+xml;base64,PHN2Zz4='), '');
+  assert.equal(validHomeImage('data:image/png;base64,AA") ; background: red'), '');
+  assert.equal(validHomeImage('https://example.com/a.png'), '');
+  assert.equal(validHomeImage(undefined), '');
 });

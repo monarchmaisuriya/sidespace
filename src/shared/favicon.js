@@ -73,13 +73,19 @@ function iconFor(pageUrl, reportedIcon) {
   return resolved.get(key);
 }
 
+const HOME_ICON = '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6.5 9v11h11V9M10 20v-5h4v5"/></svg>';
+
 // An icon box showing the first letter of the host, replaced by the site's
-// icon once one loads.
+// icon once one loads. A blank tab (no page yet) shows the home page glyph.
 export function faviconFor(pageUrl, reportedIcon = '') {
   const box = document.createElement('span');
   box.className = 'favicon';
-  box.textContent = (displayHost(pageUrl)[0] ?? '+').toUpperCase();
-  if (!pageUrl && !reportedIcon) return box;
+  if (!pageUrl) {
+    box.dataset.icon = 'home';
+    box.innerHTML = HOME_ICON;
+    return box;
+  }
+  box.textContent = (displayHost(pageUrl)[0] ?? '?').toUpperCase();
   // data-icon says how the lookup ended: "image" or "letter".
   iconFor(pageUrl, reportedIcon).then((src) => {
     box.dataset.icon = src ? 'image' : 'letter';

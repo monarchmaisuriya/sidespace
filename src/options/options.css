@@ -76,6 +76,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .swatch.custom input { width: 40px; height: 40px; border: 0; padding: 0; opacity: 0; cursor: pointer; }
 .swatch.custom.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 
+.inline { display: flex; align-items: center; gap: 8px; }
+.inline [hidden] { display: none; }
+#home-image-preview { width: 48px; height: 30px; border-radius: 4px; object-fit: cover; }
+input[type="color"] { width: 32px; height: var(--control); padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.part-list { margin: 0; padding: 0; list-style: none; }
+.part-list li { display: flex; align-items: center; gap: 4px; padding: 4px 0; }
+.part-list label { display: flex; flex: 1; align-items: center; gap: 10px; }
+.part-list input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .link-editor { margin: 8px 0 0; padding: 0; list-style: none; }
 .link-editor li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
 .link-editor li:first-child { border-top: 0; }
