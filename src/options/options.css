@@ -1,0 +1,48 @@
+@import url("../shared/theme.css");
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--text); }
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; font-size: 20px; }
+.logo { width: 32px; height: 32px; }
+h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); }
+#status { color: var(--text-muted); }
+section { margin-bottom: 14px; padding: 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.row[hidden], .help[hidden] { display: none; }
+.stack { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+input[type="url"], select, textarea {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+input[type="url"] { flex: 0 1 320px; }
+textarea { width: 100%; resize: vertical; }
+input[type="checkbox"], input[type="color"] { accent-color: var(--accent); }
+input[type="color"] { width: 44px; height: 28px; padding: 0; border: 0; background: none; }
+.help { margin: 6px 0; color: var(--text-muted); }
+code, kbd { padding: 0 4px; border-radius: 4px; background: var(--surface); font-size: 12px; }
+a { color: var(--accent); }
+.shortcuts { margin: 0; padding: 0; list-style: none; }
+.shortcuts li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.shortcuts li:last-child { border-bottom: 0; }
+.shortcuts span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.shortcuts small { color: var(--text-muted); }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { background: var(--surface-hover); }
+button.danger { color: var(--danger); }

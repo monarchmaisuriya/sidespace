@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sidespace settings</title>
+  <link rel="stylesheet" href="options.css">
+  <script type="module" src="options.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1><img src="../../icons/icon-48.png" alt="" class="logo">Sidespace settings</h1>
+      <span id="status" role="status"></span>
+    </header>
+
+    <form id="settings" autocomplete="off">
+      <section>
+        <h2>Appearance</h2>
+        <label class="row">Theme
+          <select name="theme">
+            <option value="system">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label class="row">Accent colour <input type="color" name="accent"></label>
+        <label class="row">Density
+          <select name="density">
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+          </select>
+        </label>
+        <label class="row">App rail
+          <select name="railPosition">
+            <option value="right">Right edge</option>
+            <option value="left">Left edge</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="showClock"> Show clock and date on the new tab page</label>
+        <label class="row">Tab strip
+          <select name="tabStrip">
+            <option value="auto">Hide with only one tab</option>
+            <option value="always">Always show</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h2>Browsing</h2>
+        <label class="row">Search engine
+          <select name="searchEngine">
+            <option value="google">Google</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="bing">Bing</option>
+            <option value="brave">Brave Search</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label class="row" id="custom-search-row">Custom search URL
+          <input type="url" name="customSearchUrl" placeholder="https://example.com/search?q=%s">
+        </label>
+        <p class="help" id="custom-search-help">Use <code>%s</code> where the search words go.</p>
+        <label class="row">Home page
+          <input type="url" name="homePage" placeholder="Empty shows the speed dial">
+        </label>
+        <label class="row">Links that open a new window
+          <select name="newWindowLinks">
+            <option value="panel">Open as a new panel tab</option>
+            <option value="browser">Open in a browser tab</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="restoreSession"> Restore panel tabs after restarting Chrome</label>
+      </section>
+
+      <section>
+        <h2>Sites that refuse to be embedded</h2>
+        <label class="check"><input type="checkbox" name="unlockFraming"> Show them anyway</label>
+        <p class="help">
+          Many sites forbid being shown inside another page. With this on, Sidespace removes the
+          <code>X-Frame-Options</code> header, and a <code>Content-Security-Policy</code> that contains
+          <code>frame-ancestors</code>, but only for pages loaded in the side panel. Pages in normal tabs are never changed.
+          For those panel pages the site's own Content-Security-Policy no longer applies.
+        </p>
+      </section>
+
+      <section>
+        <h2>Mobile view</h2>
+        <label class="row">Ask sites for their mobile version
+          <select name="mobileMode">
+            <option value="off">Off</option>
+            <option value="sites">Only for the sites below</option>
+            <option value="all">For every site</option>
+          </select>
+        </label>
+        <label class="stack">Sites (one per line)
+          <textarea name="mobileSites" rows="4" placeholder="youtube.com"></textarea>
+        </label>
+        <p class="help">Changes the user agent the site receives. Subdomains are included.</p>
+      </section>
+
+      <section>
+        <h2>Rail apps</h2>
+        <ul id="apps" class="shortcuts"></ul>
+        <p class="help" id="apps-empty">No apps pinned. Use <strong>Pin to rail</strong> in the panel menu.</p>
+        <div class="buttons"><button type="button" id="apps-reset">Restore default apps</button></div>
+      </section>
+
+      <section>
+        <h2>Speed dial</h2>
+        <ul id="shortcuts" class="shortcuts"></ul>
+        <p class="help" id="shortcuts-empty">Add shortcuts from the panel menu or the speed dial page.</p>
+      </section>
+
+      <section>
+        <h2>Keyboard</h2>
+        <p class="help">
+          Open the panel: <kbd>Alt+Shift+S</kbd>. Open the current page in the panel: <kbd>Alt+Shift+D</kbd>.
+          Change these at <a href="chrome://extensions/shortcuts" id="shortcuts-link">chrome://extensions/shortcuts</a>.
+        </p>
+        <p class="help">
+          Inside the panel: <kbd>Alt+L</kbd> address bar, <kbd>Alt+T</kbd> new tab, <kbd>Alt+W</kbd> close tab,
+          <kbd>Alt+R</kbd> reload, <kbd>Alt+←</kbd>/<kbd>Alt+→</kbd> back/forward, <kbd>Alt+1</kbd>…<kbd>Alt+9</kbd> switch tab.
+        </p>
+      </section>
+    </form>
+
+    <section>
+      <h2>Backup</h2>
+      <div class="buttons">
+        <button type="button" id="export">Export settings</button>
+        <button type="button" id="import">Import settings</button>
+        <button type="button" id="reset" class="danger">Reset to defaults</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
