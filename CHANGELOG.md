@@ -2,6 +2,18 @@
 
 All notable changes to Sidespace. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-10
+
+### Added
+
+- **Open beside the page**: opens a panel page in Chrome's split view next to the current browser tab, from the panel menu, a tab's right-click menu, or the "Page not showing?" hint. Uses the Tabs Split View API (Chrome 155+); no new permission.
+- Rail apps can be set to **Always open beside the page** (right-click menu, edit dialog, settings page). Clicking such an app opens it in split view instead of in the panel, or brings its tab forward when that split already shows the app's site. This is the way to keep Gmail, which refuses the panel, next to your page.
+- When Chrome refuses a split (the current tab is already split with another site), the page opens as a normal tab next to it, with Chrome's reason in a message.
+
+### Tested on
+
+- Chrome for Testing 155.0.8059.12 and 158.0.8127.18: 55 unit tests, 101 end-to-end tests (three runs in a row on 158), 8 live sites.
+
 ## [0.4.0] - 2026-11-10
 
 ### Fixed

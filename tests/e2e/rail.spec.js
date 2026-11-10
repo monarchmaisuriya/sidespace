@@ -97,7 +97,7 @@ test.describe('rail apps', () => {
     await expect(railApps().last()).toHaveAttribute('title', 'Renamed');
     await expect(railApps().last()).toHaveAttribute('data-app', `${env.altBase}/csp`);
     await expect(railApps().last()).toHaveClass(/is-open/);
-    expect((await stored()).apps.at(-1)).toEqual({ id: idBefore, title: 'Renamed', url: `${env.altBase}/csp` });
+    expect((await stored()).apps.at(-1)).toEqual({ id: idBefore, title: 'Renamed', url: `${env.altBase}/csp`, beside: false });
   });
 
   test('move an app up from its menu, then remove it', async () => {

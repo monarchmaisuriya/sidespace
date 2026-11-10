@@ -417,6 +417,7 @@ main { position: relative; flex: 1; min-height: 0; }
 .menu > button:hover, .menu-toggle:hover { background: var(--surface); }
 .menu > button:disabled { opacity: 0.4; cursor: default; }
 .menu > button.danger { color: var(--danger); }
+.menu > button[role="menuitemcheckbox"][aria-checked="true"]::after { content: "✓"; margin-left: auto; padding-left: 12px; color: var(--accent); }
 .menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
 .menu-toggle input { margin: 0; accent-color: var(--accent); }
 .zoom-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
@@ -440,6 +441,8 @@ main { position: relative; flex: 1; min-height: 0; }
 .dialog h2 { margin: 0 0 12px; font-size: var(--text-lg); }
 .dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; color: var(--text-muted); font-size: var(--text-sm); }
 .dialog input { flex: none; color: var(--text); font-size: var(--text-md); }
+.dialog label.check { flex-direction: row; align-items: center; gap: 8px; }
+.dialog input[type="checkbox"] { width: 16px; height: 16px; padding: 0; margin: 0; accent-color: var(--accent); }
 .form-error { margin: 0 0 10px; color: var(--danger); font-size: var(--text-sm); }
 .form-error[hidden] { display: none; }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }

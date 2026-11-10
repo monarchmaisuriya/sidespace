@@ -104,6 +104,8 @@ input[type="color"] { width: 32px; height: var(--control); padding: 2px; border:
 .link-editor .favicon img { width: 18px; height: 18px; }
 .link-editor .name { flex: 0 1 160px; }
 .link-editor .url { flex: 1; }
+.link-editor .beside { display: flex; flex: none; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--text-sm); cursor: pointer; }
+.link-editor .beside input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .link-editor .error { width: 100%; }
 .link-add { display: flex; gap: 8px; margin-top: 10px; }
 .link-add .name { flex: 0 1 160px; }

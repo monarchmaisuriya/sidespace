@@ -15,6 +15,7 @@ A Chrome extension that opens any website as tabs in Chrome's side panel: a seco
 - **Quick notes**: a notepad in the panel, saved automatically on this device.
 - **Mobile view**: ask chosen sites (or all sites) for their mobile version, which suits the narrow panel.
 - **Per-tab zoom**.
+- **Open beside the page**: any panel page opens in Chrome's split view next to the page you are on (panel menu, a tab's right-click menu, or the "Page not showing?" hint). A rail app can be set to **always open beside the page** (its right-click menu, its edit dialog, or the settings page), which suits sites that refuse the panel, such as Gmail. Clicking it again brings that tab forward. Needs Chrome 155 or newer; when Chrome cannot split (the current tab is already split with something else), the page opens as a normal tab next to it and Sidespace says why.
 - **Ways in**: toolbar icon, `Alt+Shift+S`, right-click "Open link / this page in Sidespace", "Search Sidespace for …", `Alt+Shift+D` to move the current page into the panel, and "Load current browser tab here" in the panel menu. "Open in browser tab" goes the other way.
 - **New-window links** (`target=_blank`, including via `<base>`) and `window.open(url, '_blank', 'noopener')` calls made while you are using the page (a click or key press in the last few seconds) become new panel tabs, or browser tabs if you prefer.
 - **Session restore**: panel tabs and their history come back when you reopen the panel, and after restarting Chrome. Restored tabs load only when you switch to them.
@@ -102,7 +103,7 @@ Nothing leaves your browser. There is no server and no analytics. With **Restore
 - Mobile view changes the user agent the server sees, not `navigator.userAgent` seen by page scripts.
 - `window.open()` without `noopener` opens a real popup, on purpose: sign-in popups need the link back to the page.
 - A form that posts to a different site which forbids framing (some single sign-on flows) cannot be shown in the panel; Sidespace offers "Open in a browser tab". Resubmitting the form from the panel would change its `Origin` header and pass its fields, often passwords, through the extension, so it does not.
-- Gmail does not work in the panel. Its service worker answers page loads itself with `X-Frame-Options: sameorigin`, which extension network rules cannot change; and loaded past the worker (tested with Chrome's debugger), Google's servers answer with "Temporary Error". The same holds for any site whose service worker refuses frames. Use **Open in a browser tab**, or Chrome's split view to keep it beside your page.
+- Gmail does not work in the panel. Its service worker answers page loads itself with `X-Frame-Options: sameorigin`, which extension network rules cannot change; and loaded past the worker (tested with Chrome's debugger), Google's servers answer with "Temporary Error". The same holds for any site whose service worker refuses frames. Set Gmail's rail app to **Always open beside the page** to keep it next to your page in Chrome's split view.
 - Some sites detect being framed in other ways; use **Open in browser tab** for those.
 - With panels open in several windows, the most recently changed one is what restores after a Chrome restart.
 

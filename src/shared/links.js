@@ -1,7 +1,8 @@
 // Editable { title, url } lists: rail apps and speed dial shortcuts.
 // Pure functions; each returns a new list or throws an Error whose message
 // can be shown to the user as is. Rail apps also carry a stable `id`, which
-// edits keep and additions get.
+// edits keep and additions get, and `beside`: open beside the page in
+// Chrome's split view instead of in the panel.
 
 import { isLinkUrl, MAX_APPS, MAX_SHORTCUTS, newAppId } from './settings.js';
 
@@ -32,19 +33,21 @@ function indexOfUrl(links, url, where) {
   return index;
 }
 
-export function addLink(links, { title, url }, where = RAIL) {
+export function addLink(links, { title, url, beside = false }, where = RAIL) {
   const href = parseLinkUrl(url);
   if (links.some((link) => link.url === href)) throw new Error(`${href} is already in ${where.place}.`);
   if (links.length >= where.max) throw new Error(`${where.place[0].toUpperCase()}${where.place.slice(1)} holds at most ${where.max}; remove one first.`);
   const link = { title: cleanTitle(title, href), url: href };
-  return [...links, where.ids ? { id: newAppId(href, new Set(links.map((item) => item.id))), ...link } : link];
+  return [...links, where.ids ? { id: newAppId(href, new Set(links.map((item) => item.id))), ...link, beside: beside === true } : link];
 }
 
-export function updateLink(links, currentUrl, { title, url }, where = RAIL) {
+// `beside` changes only when given; otherwise the app keeps its own.
+export function updateLink(links, currentUrl, { title, url, beside }, where = RAIL) {
   const index = indexOfUrl(links, currentUrl, where);
   const href = parseLinkUrl(url);
   if (links.some((link, i) => i !== index && link.url === href)) throw new Error(`${href} is already in ${where.place}.`);
-  return links.map((link, i) => (i === index ? { ...link, title: cleanTitle(title, href), url: href } : link));
+  const kept = where.ids && typeof beside === 'boolean' ? { beside } : {};
+  return links.map((link, i) => (i === index ? { ...link, title: cleanTitle(title, href), url: href, ...kept } : link));
 }
 
 export function removeLink(links, url, where = RAIL) {

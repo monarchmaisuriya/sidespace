@@ -117,7 +117,7 @@ test.describe('rail apps and speed dial lists', () => {
     await expect.poll(appTitles).toEqual(['ChatGPT', 'Claude', 'Gemini', 'Manual']);
     await options.locator('#apps li[data-url="https://docs.example/"] .url').fill('manual.example/start');
     await options.locator('#apps li[data-url="https://docs.example/"] .url').blur();
-    await expect.poll(async () => (await stored()).apps.at(-1)).toEqual({ id: idBefore, title: 'Manual', url: 'https://manual.example/start' });
+    await expect.poll(async () => (await stored()).apps.at(-1)).toEqual({ id: idBefore, title: 'Manual', url: 'https://manual.example/start', beside: false });
     await expect(panel.locator('.rail-app').last()).toHaveAttribute('title', 'Manual');
   });
 
@@ -140,8 +140,8 @@ test.describe('rail apps and speed dial lists', () => {
     await options.keyboard.type(' (kb)');
     await options.keyboard.press('Tab');
     await expect.poll(async () => (await stored()).apps).toEqual([
-      { id: 'app-one', title: 'One', url: 'https://one.example/' },
-      { id: 'app-two', title: 'Two (kb)', url: 'https://keyboard.example/' },
+      { id: 'app-one', title: 'One', url: 'https://one.example/', beside: false },
+      { id: 'app-two', title: 'Two (kb)', url: 'https://keyboard.example/', beside: false },
     ]);
     await row.getByRole('button', { name: 'Move up' }).focus();
     await options.keyboard.press('Enter');
@@ -221,7 +221,7 @@ test.describe('import and export', () => {
     expect(settings.theme).toBe('light');
     expect(settings.density).toBe('compact');
     expect(settings.shortcuts).toEqual([{ title: 'Ok', url: 'https://ok.example/' }]);
-    expect(settings.apps).toEqual([{ id: expect.stringMatching(/^app-[a-z0-9]+$/), title: 'Docs', url: 'https://docs.example/' }]);
+    expect(settings.apps).toEqual([{ id: expect.stringMatching(/^app-[a-z0-9]+$/), title: 'Docs', url: 'https://docs.example/', beside: false }]);
     await expect(options.locator('select[name="density"]')).toHaveValue('compact');
   });
 

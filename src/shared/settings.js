@@ -187,10 +187,12 @@ function normalizeLinks(list, max) {
 function normalizeApps(list) {
   const taken = new Set();
   return normalizeLinks(list, MAX_APPS).map((link) => {
-    const given = list.find((item) => item?.url === link.url)?.id;
+    const stored = list.find((item) => item?.url === link.url);
+    const given = stored?.id;
     const id = typeof given === 'string' && APP_ID.test(given) && !taken.has(given) ? given : newAppId(link.url, taken);
     taken.add(id);
-    return { id, ...link };
+    // beside: open in Chrome's split view next to the page, not in the panel.
+    return { id, ...link, beside: stored?.beside === true };
   });
 }
 

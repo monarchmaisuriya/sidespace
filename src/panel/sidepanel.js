@@ -178,7 +178,48 @@ function openUrlFromOutside(url) {
   else if (isHttpUrl(url)) openTab(url);
 }
 
+// Opens `url` in Chrome's split view next to this window's active browser
+// tab. Chrome gives the new tab the active tab's pinned and group state; it
+// refuses only a tab that is already split. If the active tab's split already
+// shows what was asked for, that tab is brought forward instead; otherwise a
+// refused page opens as a normal tab next to it, and the toast says why.
+// `sameAs`: 'page' when asking for that exact address (menu, hint), 'site'
+// for a rail app, which counts as shown at any address on its site.
+async function openBeside(url, sameAs = 'page') {
+  const [anchor] = await chrome.tabs.query({ active: true, windowId });
+  if (!('SPLIT_VIEW_ID_NONE' in chrome.tabs)) {
+    await chrome.tabs.create({ url, windowId, index: anchor.index + 1 });
+    showToast('Opened next to this page: split view needs Chrome 155 or newer.');
+    return;
+  }
+  const shows = (tab) => URL.canParse(tab.url)
+    && (sameAs === 'site' ? new URL(tab.url).origin === new URL(url).origin : tab.url === url);
+  if (shows(anchor)) return;
+  if (anchor.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE) {
+    const partner = (await chrome.tabs.query({ windowId }))
+      .find((tab) => tab.splitViewId === anchor.splitViewId && tab.id !== anchor.id);
+    if (partner && shows(partner)) {
+      await chrome.tabs.update(partner.id, { active: true });
+      return;
+    }
+  }
+  try {
+    await chrome.tabs.create({ url, windowId, splitWithTabId: anchor.id });
+  } catch (refusal) {
+    await chrome.tabs.create({ url, windowId, index: anchor.index + 1 });
+    showToast(`Opened next to this page: ${refusal.message}`);
+  }
+}
+
+function openBesideOrSay(url, sameAs) {
+  openBeside(url, sameAs).catch((error) => showToast(error.message));
+}
+
 function openApp(app) {
+  if (app.beside) {
+    openBesideOrSay(app.url, 'site');
+    return;
+  }
   const existing = model.findAppTab(session, app.id);
   if (existing) activate(existing.id);
   else openTab(app.url, { app: app.id });
@@ -359,7 +400,7 @@ function renderRail() {
     const appTab = model.findAppTab(session, app.id);
     button.dataset.app = app.url;
     button.dataset.appId = app.id;
-    button.title = app.title;
+    button.title = app.beside ? `${app.title}\nOpens beside the page` : app.title;
     button.setAttribute('aria-label', app.title);
     button.setAttribute('aria-pressed', String(view === 'web' && active?.app === app.id));
     button.classList.toggle('is-open', Boolean(appTab));
@@ -534,7 +575,7 @@ function renderMenu() {
   const page = view === 'web' ? active?.url : '';
   const host = page ? normalizeHostname(page) : '';
   for (const button of ui.menu.querySelectorAll('[data-command]')) {
-    const needsPage = ['open-in-browser', 'add-shortcut', 'toggle-pin', 'zoom-in', 'zoom-out'].includes(button.dataset.command);
+    const needsPage = ['open-in-browser', 'open-beside', 'add-shortcut', 'toggle-pin', 'zoom-in', 'zoom-out'].includes(button.dataset.command);
     button.disabled = needsPage && !page;
   }
   const pinned = Boolean(active && appForTab(active)) || Boolean(page && isPinned(page));
@@ -578,8 +619,8 @@ function openAddAppDialog() {
   appDialog.open({
     title: 'Add an app',
     values: page ? { title: tabLabel(page), url: page.url } : { title: '', url: '' },
-    save: async ({ title, url }) => {
-      const apps = await changeApps((current) => addLink(current, { title, url }, RAIL));
+    save: async ({ title, url, beside }) => {
+      const apps = await changeApps((current) => addLink(current, { title, url, beside }, RAIL));
       const added = apps.at(-1);
       // The current page becomes the new app's tab when it is that page.
       if (page && page.url === added.url) setSession(model.tieTab(session, page.id, added.id));
@@ -593,7 +634,7 @@ function openEditAppDialog(app) {
     title: 'Edit app',
     values: app,
     // The app keeps its id, so its open tab stays tied to it.
-    save: ({ title, url }) => changeApps((current) => updateLink(current, app.url, { title, url }, RAIL)),
+    save: ({ title, url, beside }) => changeApps((current) => updateLink(current, app.url, { title, url, beside }, RAIL)),
   });
 }
 
@@ -657,10 +698,23 @@ function appMenu(target, app) {
   openRailMenu(target, [
     menuButton('Open', () => openApp(app)),
     menuButton('Edit…', () => openEditAppDialog(app)),
+    besideToggle(app),
     menuButton('Move up', () => moveApp(app, -1), { disabled: index === 0 }),
     menuButton('Move down', () => moveApp(app, 1), { disabled: index === settings.apps.length - 1 }),
     menuButton('Remove from rail', () => removeApp(app), { danger: true }),
   ]);
+}
+
+// "Always open beside the page" as a checkable menu item.
+function besideToggle(app) {
+  const button = menuButton('Always open beside the page', () => appAction(() => changeApps((current) => {
+    const stored = current.find((item) => item.id === app.id);
+    if (!stored) throw new Error('That link is no longer in the rail.');
+    return updateLink(current, stored.url, { title: stored.title, url: stored.url, beside: !stored.beside }, RAIL);
+  })));
+  button.role = 'menuitemcheckbox';
+  button.setAttribute('aria-checked', String(app.beside));
+  return button;
 }
 
 function tabMenu(target, tab) {
@@ -670,6 +724,7 @@ function tabMenu(target, tab) {
       togglePin();
     }, { disabled: !tab.url }),
     menuButton('Open in browser tab', () => chrome.tabs.create({ url: tab.url, windowId }), { disabled: !tab.url }),
+    menuButton('Open beside the page', () => openBesideOrSay(tab.url), { disabled: !tab.url }),
     menuButton('Close tab', () => closeTab(tab.id), { danger: true, disabled: !model.canCloseTab(session) }),
   ]);
 }
@@ -756,6 +811,10 @@ const COMMANDS = {
   'open-in-browser': () => {
     const active = activeWebTab();
     if (active?.url) chrome.tabs.create({ url: active.url, windowId });
+  },
+  'open-beside': () => {
+    const active = activeWebTab();
+    if (active?.url) openBesideOrSay(active.url);
   },
   'load-current-tab': loadCurrentBrowserTab,
   'add-shortcut': () => {
@@ -961,6 +1020,7 @@ function bindEvents() {
   ui.mobileToggle.addEventListener('change', toggleMobileForActiveSite);
 
   $('hint-open-browser').addEventListener('click', () => COMMANDS['open-in-browser']());
+  $('hint-open-beside').addEventListener('click', () => COMMANDS['open-beside']());
   $('hint-dismiss').addEventListener('click', () => {
     hintTabs.delete(session.activeId);
     renderHint();
@@ -1025,6 +1085,7 @@ async function init() {
     heading: $('app-dialog-title'),
     nameInput: $('app-name'),
     urlInput: $('app-url'),
+    besideInput: $('app-beside'),
     error: $('app-error'),
     cancelButton: $('app-cancel'),
   });

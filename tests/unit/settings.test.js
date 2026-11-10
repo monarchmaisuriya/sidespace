@@ -140,3 +140,12 @@ test('home image: only a base64 webp, jpeg or png data URL is used', () => {
   assert.equal(validHomeImage('https://example.com/a.png'), '');
   assert.equal(validHomeImage(undefined), '');
 });
+
+test('rail apps: "open beside the page" is true only when stored as exactly true', () => {
+  const apps = normalizeSettings({ apps: [
+    { title: 'A', url: 'https://a.example/', beside: true },
+    { title: 'B', url: 'https://b.example/', beside: 'yes' },
+    { title: 'C', url: 'https://c.example/' },
+  ] }).apps;
+  assert.deepEqual(apps.map((app) => app.beside), [true, false, false]);
+});

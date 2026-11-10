@@ -100,9 +100,19 @@ function renderEditor(key) {
   // saves made from this page, the panel or another window.
   reconcile(document.getElementById(editor.list), links, (link) => link.id ?? link.url, () => {
     const li = document.createElement('li');
+    li.append(textInput('name', `${editor.noun} name`), textInput('url', `${editor.noun} address`));
+    if (editor.where.ids) {
+      // Rail apps only: open beside the page in Chrome's split view.
+      const beside = document.createElement('label');
+      beside.className = 'beside';
+      beside.title = 'Open beside the page (Chrome split view), not in the panel';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.setAttribute('aria-label', 'Open beside the page');
+      beside.append(box, 'Beside');
+      li.append(beside);
+    }
     li.append(
-      textInput('name', `${editor.noun} name`),
-      textInput('url', `${editor.noun} address`),
       iconButton('up', 'Move up'),
       iconButton('down', 'Move down'),
       iconButton('remove', 'Remove'),
@@ -115,6 +125,8 @@ function renderEditor(key) {
     const url = li.querySelector('.url');
     if (document.activeElement !== name) name.value = link.title;
     if (document.activeElement !== url) url.value = link.url;
+    const beside = li.querySelector('.beside input');
+    if (beside) beside.checked = link.beside === true;
     li.querySelector('[data-action="up"]').disabled = index === 0;
     li.querySelector('[data-action="down"]').disabled = index === links.length - 1;
     setIcon(li, link.url, '', faviconFor);
@@ -167,7 +179,8 @@ for (const key of Object.keys(EDITORS)) {
     if (!row) return;
     const title = row.querySelector('.name').value;
     const url = row.querySelector('.url').value;
-    editList(key, (links, where) => updateLink(links, row.dataset.url, { title, url }, where));
+    const beside = row.querySelector('.beside input')?.checked;
+    editList(key, (links, where) => updateLink(links, row.dataset.url, { title, url, beside }, where));
   });
 
   const add = document.getElementById(editor.add);

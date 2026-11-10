@@ -56,6 +56,7 @@
       <div class="hint" id="load-hint" hidden>
         <span>Page not showing?</span>
         <button class="link-button" id="hint-open-browser">Open in a browser tab</button>
+        <button class="link-button" id="hint-open-beside">Open beside this page</button>
         <button class="icon-button small" id="hint-dismiss" aria-label="Dismiss">
           <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
@@ -117,6 +118,7 @@
   <div id="menu" popover class="menu">
     <button data-command="new-tab">New tab<kbd>Alt+T</kbd></button>
     <button data-command="open-in-browser">Open in browser tab</button>
+    <button data-command="open-beside">Open beside this page</button>
     <button data-command="load-current-tab">Load current browser tab here</button>
     <hr>
     <button data-command="toggle-pin" id="menu-pin">Pin to rail</button>
@@ -141,6 +143,7 @@
       <h2 id="app-dialog-title">Add an app</h2>
       <label>Name<input id="app-name" type="text" placeholder="My app" maxlength="80"></label>
       <label>Address<input id="app-url" type="text" placeholder="example.com" spellcheck="false" required></label>
+      <label class="check"><input id="app-beside" type="checkbox">Open beside the page (Chrome split view), not in the panel</label>
       <p class="form-error" id="app-error" role="alert" hidden></p>
       <div class="dialog-buttons">
         <button type="button" id="app-cancel">Cancel</button>

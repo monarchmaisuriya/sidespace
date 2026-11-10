@@ -44,3 +44,12 @@ test('removeLink and moveLink work by URL; moves clamp to the list', () => {
   assert.deepEqual(moveLink([A, B, C], A.url, 99), [B, C, A]);
   assert.throws(() => removeLink([A], B.url), /no longer in the rail/);
 });
+
+test('rail apps carry "open beside the page": set on add, changed or kept on edit, never on shortcuts', () => {
+  assert.equal(addLink([], { title: 'Mail', url: 'mail.example', beside: true })[0].beside, true);
+  assert.equal(addLink([], { title: 'Mail', url: 'mail.example' })[0].beside, false);
+  assert.equal('beside' in addLink([], { title: 'S', url: 's.example', beside: true }, SPEED_DIAL)[0], false);
+  const app = { id: 'app-1', title: 'Mail', url: 'https://mail.example/', beside: true };
+  assert.equal(updateLink([app], app.url, { title: 'Mail', url: 'mail.example' })[0].beside, true);
+  assert.equal(updateLink([app], app.url, { title: 'Mail', url: 'mail.example', beside: false })[0].beside, false);
+});
